@@ -3,9 +3,10 @@
 # setup.sh — One-command bootstrap.
 #
 # 1. Installs Node deps
-# 2. Logs into Bright Data (if not already)
-# 3. Creates the 20 collectors (interactive)
-# 4. Sets up .env
+# 2. Sets up .env
+# 3. Logs into Bright Data (if not already)
+# 4. Creates any missing collectors (skipped when real c_* IDs already exist)
+# 5. Runs the first scrape
 #
 # Run on a fresh clone: ./scripts/setup.sh
 # ============================================================================
@@ -56,10 +57,17 @@ fi
 
 # --- 5. Create collectors ---------------------------------------------------
 echo ""
-echo "🕷️  Creating 20 Scraper Studio collectors..."
-echo "   This will take ~15-20 minutes (one scraper at a time)."
-read -rp "Press ENTER to start, or Ctrl+C to cancel..."
-bash scripts/create-collectors.sh
+# Skip creation if collectors.json already has real c_* IDs (this repo ships
+# with 10 live collectors; the script below only fills c_REPLACE_ME entries).
+if grep -q 'c_REPLACE_ME' collectors.json 2>/dev/null; then
+  echo "🕷️  Creating the missing Scraper Studio collectors..."
+  echo "   (Each takes ~5–15 min; the script saves progress after every success.)"
+  read -rp "Press ENTER to start, or Ctrl+C to cancel..."
+  bash scripts/create-collectors.sh
+else
+  echo "✅ collectors.json already has real c_* collector IDs — skipping creation."
+  echo "   (To add a new vendor: add a c_REPLACE_ME entry, then run scripts/create-collectors.sh <vendor>)"
+fi
 
 # --- 6. First scrape --------------------------------------------------------
 echo ""

@@ -32,10 +32,13 @@ with `c_REPLACE_ME`, then run `npx tsx scripts/create-collectors.ts <vendor>`.
 
 ## Commands
 
-- `npm run scrape` — run every enabled collector (+ GitHub Releases sources)
+- `npm run scrape` — run every enabled collector (+ GitHub Releases sources);
+  auto-heals broken ones (detect → heal → approve → re-run)
+- `VENDOR_FILTER=openai npm run scrape` — one vendor only
 - `npm run diff` / `npm run alert` / `npm run all` — pipeline steps
+- `npm run heal -- <vendor> "what broke"` — on-demand heal via the production path
 - `npm run watch -- add|remove|list <keyword>` — keyword watches
-- `npm run typecheck` — must pass before committing
+- `npm test` / `npm run typecheck` — must pass before committing
 - Dashboard: `cd dashboard && npm run dev`
 
 ## Bright Data API notes (learned from production)
@@ -44,10 +47,16 @@ with `c_REPLACE_ME`, then run `npx tsx scripts/create-collectors.ts <vendor>`.
 - Generate template: `POST /dca/collectors/{id}/automate_template` `{ "urls": [url] }`
   - MAX 3 concurrent generations per account → retry 429s with backoff
   - Generation takes 5–15 min; collectors 403 "does not have a template" until done
+  - The pipeline auto-queues regeneration when a trigger 403s this way
 - Trigger: `POST /dca/trigger?collector={id}&queue_next=1` body `[{"url": ...}]`
 - Poll: `GET /dca/dataset?id={j_*}` → 202 while building, then
   `{"entries": [...]}` (wrapped!) or a bare array — handle both.
-- Heal: `POST /dca/collectors/{id}/refactor_template` `{ "prompt": "..." }`
+  502/503/504 are transient — keep polling, don't fail the run.
+- Heal: `POST /dca/collectors/{id}/refactor_template` `{ "prompt": "..." }` (prompt ≤ 1000 chars)
+- Heal progress: `GET /dca/collectors/{id}/refactor_template/progress`
+  → wait for `status: "pending_answer"` (step `user_approval`)
+- Approve: `POST /dca/collectors/{id}/resume_automation_job`
+  `{ "message": true, "auto_save": true }` (NOT /approve — that endpoint doesn't exist)
 
 ## Conventions
 

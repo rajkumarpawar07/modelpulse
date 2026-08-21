@@ -2,43 +2,40 @@
 # ============================================================================
 # demo-heal.sh — The self-healing demo, scripted for screen recording.
 #
-# This script:
-#   1. Picks a real collector (Mistral is the most volatile)
-#   2. Runs the current scraper
-#   3. Shows that the `change_type` field is now returning null (or whatever
-#      you set up in advance)
-#   4. Runs `bdata scraper heal` with a specific description
-#   5. Approves the fix
-#   6. Re-runs the scraper
-#   7. Shows the new output with the field populated
+# Every step below runs REAL code against a REAL collector:
+#   1. Run the pipeline for one vendor (VENDOR_FILTER) — shows live output
+#      and the detection logic that decides when healing is needed
+#   2. Trigger a heal through the production code path (`npm run heal`) —
+#      the exact same HTTP calls the daily cron makes automatically:
+#      POST /dca/collectors/{id}/refactor_template → poll → approve → re-run
+#   3. Re-run the same collector and show the recovered data
 #
-# The same `c_*` ID is used throughout — that is the headline.
+# Nothing here is simulated. There is no staged "broken" output — if you
+# want to demo a real break, heal runs equally well when the site actually
+# changed; the cron version of this flow fires on its own (see src/cli.ts).
 #
-# Usage:  bash scripts/demo-heal.sh
+# Usage:  bash scripts/demo-heal.sh [vendor]    (default: mistral)
 # Record with Loom:  loom.com → New Recording → Screen + Camera (optional)
 # ============================================================================
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+VENDOR="${1:-mistral}"
+
 if [ ! -f collectors.json ]; then
-  echo "❌ collectors.json not found. Run setup.sh first."
+  echo "❌ collectors.json not found. Run scripts/setup.sh first."
   exit 1
 fi
 
-# Pick the first non-placeholder collector. Edit this to your favorite.
-VENDOR="mistral"
 COLLECTOR_ID=$(node -e "const c=require('./collectors.json'); const x=c.collectors.find(x=>x.vendor==='$VENDOR'); if(!x||x.collector_id.includes('REPLACE')){console.error('No real collector for $VENDOR');process.exit(1)}; console.log(x.collector_id);")
 
-# URL of the page we're going to demonstrate the break on
-URL="https://docs.mistral.ai/getting-started/changelog/"
+URL=$(node -e "const c=require('./collectors.json'); console.log(c.collectors.find(x=>x.vendor==='$VENDOR').url);")
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🕷️  ModelPulse — Self-Healing Demo"
+echo "🕷️  ModelPulse — Self-Healing Demo (live, nothing staged)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "This demo shows Bright Data Scraper Studio's self-healing flow."
 echo ""
 echo "Target vendor:       $VENDOR"
 echo "Collector ID:        $COLLECTOR_ID"
@@ -46,87 +43,50 @@ echo "Changelog URL:       $URL"
 echo ""
 echo "Same c_* ID before and after healing. No downstream code changes."
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
 read -rp "Press ENTER to start the demo (or Ctrl+C to cancel)..."
 
-# --- Step 1: Run the current scraper ---------------------------------------
+# --- Step 1: Run the pipeline for this vendor -------------------------------
 echo ""
-echo "▶ STEP 1: Run the current scraper"
-echo "  $ bdata scraper run $COLLECTOR_ID $URL --pretty"
+echo "▶ STEP 1: Run the pipeline for $VENDOR (VENDOR_FILTER=$VENDOR npm run scrape)"
+echo "  The pipeline detects breakage on three signals:"
+echo "    - hard errors        (trigger/poll failures)"
+echo "    - 0 rows returned    (page moved completely)"
+echo "    - partial breakage   (rows return but title/date/change_type go null)"
 echo ""
-npx -p @brightdata/cli bdata scraper run "$COLLECTOR_ID" "$URL" --pretty 2>&1 | head -80
-echo ""
-echo "  (Showing the first 80 lines. Notice: change_type field is present and populated.)"
+VENDOR_FILTER="$VENDOR" AUTO_HEAL=false npm run scrape
 echo ""
 read -rp "Press ENTER for step 2..."
 
-# --- Step 2: Stage a "break" by simulating a real-world issue ---------------
+# --- Step 2: Heal via the production command --------------------------------
 echo ""
-echo "▶ STEP 2: Now we discover Mistral has restructured their page."
-echo "  The 'change_type' field is now returning NULL in the output."
-echo "  (In a real scenario, our daily cron would notice the missing field.)"
+echo "▶ STEP 2: Heal the collector through the production code path."
+echo "  npm run heal -- $VENDOR \"<what broke>\""
 echo ""
-echo "  Simulating the broken output..."
-cat <<'EOF'
-[
-  {
-    "title": "mistral-large-2407 availability update",
-    "date": "2026-08-15",
-    "change_type": null,    ← NULL! Should be "added" or "changed"
-    "version": "2407",
-    "description": "...",
-    "url": "https://..."
-  }
-]
-EOF
+echo "  This is the SAME code the daily cron runs automatically when a"
+echo "  collector degrades (src/cli.ts → healCollector → waitForHealReady"
+echo "  → approveHeal → re-run). Equivalent Bright Data CLI for reference:"
+echo "    bdata scraper heal $COLLECTOR_ID \"<what broke>\""
+echo "    bdata scraper approve $COLLECTOR_ID"
+echo ""
+read -rp "Press ENTER to run the heal for real..."
+npm run heal -- "$VENDOR" "Demo heal: re-inspect the page and make sure every entry returns title, date, change_type, description, url"
 echo ""
 read -rp "Press ENTER for step 3..."
 
-# --- Step 3: Run bdata scraper heal -----------------------------------------
+# --- Step 3: Re-run and show the recovered data -----------------------------
 echo ""
-echo "▶ STEP 3: Heal the scraper. We describe what broke in plain English."
-echo "  The Bright Data AI Agent re-inspects the page, fixes the schema,"
-echo "  and waits for our approval."
+echo "▶ STEP 3: Re-run the SAME collector. Same c_* ID, no downstream change."
 echo ""
-echo "  $ bdata scraper heal $COLLECTOR_ID \\"
-echo "      \"The change_type field returns null since Mistral restructured"
-echo "       their changelog markup. Look for the new 'category' label and"
-echo "       map it to: added, changed, deprecated, removed, or fixed.\" \\"
-echo "      --url $URL"
-echo ""
-npx -p @brightdata/cli bdata scraper heal "$COLLECTOR_ID" \
-  "The change_type field returns null since Mistral restructured their changelog markup. Look for the new 'category' label and map it to: added, changed, deprecated, removed, or fixed." \
-  --url "$URL" 2>&1 | head -60
-echo ""
-read -rp "Press ENTER for step 4..."
-
-# --- Step 4: Approve the fix ------------------------------------------------
-echo ""
-echo "▶ STEP 4: Approve the fix."
-echo "  $ bdata scraper approve $COLLECTOR_ID"
-echo ""
-npx -p @brightdata/cli bdata scraper approve "$COLLECTOR_ID" 2>&1 | head -30
-echo ""
-read -rp "Press ENTER for step 5..."
-
-# --- Step 5: Re-run the scraper --------------------------------------------
-echo ""
-echo "▶ STEP 5: Re-run the SAME scraper. Same c_* ID. No downstream code change."
-echo "  $ bdata scraper run $COLLECTOR_ID $URL --pretty"
-echo ""
-npx -p @brightdata/cli bdata scraper run "$COLLECTOR_ID" "$URL" --pretty 2>&1 | head -80
-echo ""
-echo "  ✅ The 'change_type' field is now populated. Self-healed."
+VENDOR_FILTER="$VENDOR" AUTO_HEAL=false npm run scrape
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🎉 Demo complete."
 echo ""
 echo "What just happened:"
-echo "  - Same collector_id: $COLLECTOR_ID"
-echo "  - No downstream code changed (our src/normalize.ts still reads change_type)"
-echo "  - The scraper learned the new markup in ~30 seconds"
-echo "  - 19 other collectors kept running. We only touched this one."
+echo "  - Same collector_id throughout: $COLLECTOR_ID"
+echo "  - The heal went through our production HTTP client, not a one-off script"
+echo "  - Every attempt is recorded in the heals table → visible at /health"
+echo "  - The daily cron runs this exact loop on its own when detection fires"
 echo ""
 echo "Record the terminal during this run. Upload to YouTube (unlisted → public)."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

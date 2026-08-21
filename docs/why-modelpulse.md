@@ -32,7 +32,7 @@ The hackathon explicitly says "Judges will be looking for [self-healing]." Most 
 |-----------|---------------------------|
 | **Potential impact** | Every AI developer (the audience) has been bitten by API breaking changes. The pain is universal. |
 | **Creativity and innovation** | "AI API Change Intelligence" is a new category. The week-over-week diff framing is novel. |
-| **Technical excellence** | 20 collectors, self-healing, time-series storage, Slack alerts, Next.js dashboard, GitHub Actions cron. All in TypeScript, all type-checked. |
+| **Technical excellence** | 10 collectors, self-healing, time-series storage, Slack alerts, Next.js dashboard, GitHub Actions cron. All in TypeScript, all type-checked. |
 | **Use of Scraper Studio** | Scraper Studio is not a side feature — it IS the data layer. 20 `c_*` IDs orchestrated into one app. |
 | **Reliability and self-healing** | The headline demo. `bdata scraper heal` shown in the video, in the README, in the docs. |
 | **Presentation** | 3-minute demo with a clear arc: problem → dashboard → alert → scrape flow → self-heal → close. |
@@ -42,7 +42,7 @@ The hackathon explicitly says "Judges will be looking for [self-healing]." Most 
 A hackathon project that becomes a real product has three properties:
 
 1. **Real users with real pain.** → AI developers, every day.
-2. **Defensible technical core.** → 20 collectors + self-healing + diff engine. The competitor would need to either re-build the collectors manually or wait for Bright Data to add them to the pre-built library.
+2. **Defensible technical core.** → 10 collectors + self-healing + diff engine. The competitor would need to either re-build the collectors manually or wait for Bright Data to add them to the pre-built library.
 3. **A path to revenue.** → Charge teams a Slack-alert subscription. Or sell the diff feed as a JSON API to AI observability startups (LangSmith, Helicone, etc.).
 
 The hackathon gives you a week to ship the prototype. The product is what you keep building after.
@@ -59,6 +59,6 @@ The hackathon gives you a week to ship the prototype. The product is what you ke
 
 ## The narrative judges will quote
 
-> "20 collectors, all self-healing, all wired into a single Slack alert. Same `c_*` ID before and after the page changed. The scraper that fixes itself — that's what you ship in 3 days with Bright Data Scraper Studio."
+> "10 collectors, all self-healing, all wired into a single Slack alert. Same `c_*` ID before and after the page changed. The scraper that fixes itself — that's what you ship in 3 days with Bright Data Scraper Studio."
 
 That sentence is in the demo video script. It is the line that wins.

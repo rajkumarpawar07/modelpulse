@@ -13,6 +13,7 @@
     "alert": "tsx src/cli.ts alert",
     "all": "tsx src/cli.ts all",
     "watch": "tsx src/cli.ts watch",
+    "heal": "tsx src/cli.ts heal",
     "demo:heal": "bash scripts/demo-heal.sh",
     "seed": "bash scripts/seed-data.sh",
     "typecheck": "tsc --noEmit",

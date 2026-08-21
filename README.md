@@ -19,6 +19,17 @@ AI vendors (OpenAI, Anthropic, Mistral, Cohere, Groq, ...) ship breaking changes
 
 Most developers find out from their error logs, not from the vendor. By then, production is already down.
 
+### "Why not just subscribe to each vendor's RSS / email?"
+
+Because subscribing isn't the problem — **normalizing, scoring, and acting** is. The 15-second answer:
+
+1. **Half these vendors have no feed at all.** Mistral, Cohere, Groq, Together, Fireworks, Replicate publish changelogs as plain HTML pages. There is nothing to subscribe to.
+2. **Even where feeds exist, they're unstructured marketing prose.** No `change_type`, no breaking flag, no version. ModelPulse normalizes every vendor into one schema (`added/changed/deprecated/removed/fixed` + a 0–100 impact score) so machines can act on it, not just humans read it.
+3. **Feeds only tell you what's new — never what was *edited*.** Vendors silently rewrite published entries. ModelPulse diffs every field on every scrape and flags silent edits (the ↻ EDITED badge).
+4. **Feeds can't fail your CI build.** The point isn't reading changelogs — it's `npm run check-breaking` gating your deploy, webhooks firing into Slack, and one queryable API across all vendors.
+
+And when a vendor redesigns their page (which kills every naive scraper *and* every homegrown RSS-to-X hack), Scraper Studio heals the collector in place. That's the part no feed subscription can ever give you.
+
 ## The solution
 
 A self-healing pipeline of Bright Data collectors that:
@@ -65,13 +76,14 @@ For the full list of all 10 collectors and the exact creation prompts, see [`scr
 |---------|--------------|------------------------|
 | `bdata scraper create` | Generate a scraper from a URL + natural-language description | One-time per vendor; creates our 10 collectors |
 | `bdata scraper run` | Execute a scraper on a URL and return structured data | Called by `npm run scrape` against all 10 collectors |
-| `bdata scraper heal` | Fix an existing scraper in place via AI self-healing | Called automatically when a collector returns 0 rows, or manually via `npm run demo:heal` |
+| `bdata scraper heal` | Fix an existing scraper in place via AI self-healing | Called automatically by the daily cron when a collector fails, returns 0 rows, or shows partial breakage — or on demand via `npm run heal -- <vendor> "what broke"` |
 
 Under the hood, the CLI maps to these Bright Data HTTP endpoints:
-- `POST /dca/collector` + `POST /dca/collectors/{c_*}/automate_template` (create)
+- `POST /dca/collector` + `POST /dca/collectors/{c_*}/automate_template` (create / regenerate template)
 - `POST /dca/trigger` + `GET /dca/dataset?id=j_*` (run)
-- `POST /dca/collectors/{id}/refactor_template` (heal) + `GET /dca/collectors/{id}` (poll until the refactor finishes)
-- `POST /dca/collectors/{id}/approve` (approve the healed template)
+- `POST /dca/collectors/{id}/refactor_template` with `{"prompt": ...}` (heal)
+- `GET /dca/collectors/{id}/refactor_template/progress` (poll until the job reaches its approval gate)
+- `POST /dca/collectors/{id}/resume_automation_job` with `{"message": true, "auto_save": true}` (approve)
 
 See [`src/brightdata.ts`](./src/brightdata.ts) for our direct-HTTP client that calls these endpoints without the CLI (so it runs in GitHub Actions without an interactive login).
 
@@ -98,7 +110,11 @@ bdata scraper approve c_mistral_xxx
 4. **Wait** — poll the collector until the AI refactor reports finished, so we never approve a half-written template.
 5. **Approve & re-run** — approve the healed template and re-run the same `c_*` collector (up to 2 attempts), with results upserted as usual.
 
-Every attempt is recorded in the `heals` table and rendered on the dashboard's `/health` page.
+Every attempt is recorded in the `heals` table and rendered on the dashboard's `/health` page:
+
+![ModelPulse health page — collector status and the self-healing log](./docs/screenshot-health.png)
+
+That screenshot is from a real run: detection fired on real failure signals (a 502 timeout, a "Collector does not have a template" 403, and genuine partial breakage — 29/29 rows missing `change_type`), and the heal loop approved a real fix (`ia_mt3bcpnuo5ux6zu0k`) against the same `c_*` collector ID.
 
 ---
 
@@ -217,8 +233,9 @@ npm run alert         # Send the alert to Slack/Discord/webhook
 npm run all           # Full pipeline: scrape → diff → alert
 npm run watch -- add "rate limit"   # add a keyword watch
 npm run watch -- list               # list / remove watches
+npm run heal -- mistral "what broke" # on-demand heal (production code path)
 npm run seed          # Populate demo data without scraping
-npm run demo:heal     # Run the self-healing demo
+npm run demo:heal     # Guided self-healing demo (runs real commands, nothing staged)
 npm test              # Run unit tests (Vitest)
 npm run typecheck     # TypeScript validation
 ```
@@ -335,7 +352,7 @@ modelpulse/
 │   ├── impact.ts                      # 0-100 severity scoring
 │   ├── diff.ts                        # week-over-week diff engine
 │   ├── alert.ts                       # Slack/Discord/webhook dispatcher
-│   ├── cli.ts                         # the main entry point (+ watch commands)
+│   ├── cli.ts                         # the main entry point (+ watch & heal commands)
 │   └── sources/
 │       └── github.ts                  # GitHub Releases source adapter
 ├── dashboard/                         # Next.js 14 dashboard ("SIGNAL" mission-control UI)
@@ -363,10 +380,11 @@ modelpulse/
 ├── ci/
 │   └── check-breaking.mjs             # CI gate: fail builds on breaking changes
 ├── scripts/
-│   ├── create-collectors.sh           # creates all 10 c_* IDs
+│   ├── create-collectors.sh           # wrapper → create-collectors.ts (merge-safe)
+│   ├── create-collectors.ts           # creates collectors via the direct API
 │   ├── setup.sh                       # one-command bootstrap
-│   ├── demo-heal.sh                   # the self-healing demo
-│   ├── seed-data.sh                   # populate fake data
+│   ├── demo-heal.sh                   # self-healing demo (real commands, nothing staged)
+│   ├── seed-data.sh                   # populate demo data
 │   └── seed.ts                        # the seed script
 ├── .github/workflows/
 │   └── daily-scrape.yml               # cron: 09:00 UTC daily
@@ -383,7 +401,8 @@ modelpulse/
 │   ├── self-healing.md                # the demo transcript
 │   ├── live-heal-log.md               # real heal transcript (actual API calls)
 │   ├── why-modelpulse.md
-│   └── screenshot-dashboard.png
+│   ├── screenshot-dashboard.png       # overview page, real data
+│   └── screenshot-health.png          # /health — collector status + heal log
 ├── examples/
 │   ├── openai-sample.json
 │   ├── anthropic-sample.json

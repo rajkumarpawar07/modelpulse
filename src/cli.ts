@@ -10,6 +10,7 @@
  *   npm run watch -- add "rate limit"   # add a keyword watch
  *   npm run watch -- remove "rate limit" # remove by keyword or id
  *   npm run watch -- list              # list watches
+ *   npm run heal -- mistral "what broke" # on-demand heal via the production path
  *
  * Runs on Node 20+ with tsx for TypeScript execution.
  */
@@ -32,7 +33,8 @@ import {
   loadCollectors,
   healCollector,
   approveHeal,
-  waitForHealReady,
+  waitForHealApproval,
+  generateTemplate,
 } from './brightdata.js';
 import { normalizeDataset, detectPartialFailure } from './normalize.js';
 import { computeDiff, printDiff } from './diff.js';
@@ -73,6 +75,7 @@ async function scrapeOne(collector: Collector): Promise<ScrapeResult> {
     const changes = normalizeDataset(dataset, collector);
     const res = upsertChanges(db, changes);
     finishRun(db, runId, 'success', changes.length);
+    console.log(`  ✅ ${collector.vendor_display.padEnd(20)} — ${changes.length} rows (${res.inserted} new, ${res.updated} mutated)`);
     return {
       collector,
       ok: true,
@@ -85,6 +88,7 @@ async function scrapeOne(collector: Collector): Promise<ScrapeResult> {
   } catch (err) {
     const msg = (err as Error).message;
     finishRun(db, runId, 'failed', 0, msg);
+    console.log(`  ❌ ${collector.vendor_display.padEnd(20)} — ${msg.slice(0, 80)}`);
     return { collector, ok: false, rows: 0, inserted: 0, updated: 0, changes: [], error: msg };
   }
 }
@@ -123,7 +127,6 @@ async function cmdScrape(): Promise<void> {
 
   for (const r of results) {
     if (r.ok) {
-      console.log(`  ✅ ${r.collector.vendor_display.padEnd(20)} — ${r.rows} rows (${r.inserted} new, ${r.updated} mutated)`);
       totalChanges += r.rows;
       allChanges.push(...r.changes);
 
@@ -140,7 +143,6 @@ async function cmdScrape(): Promise<void> {
         });
       }
     } else {
-      console.log(`  ❌ ${r.collector.vendor_display.padEnd(20)} — ${r.error!.slice(0, 80)}`);
       totalFailures += 1;
       failedCollectors.push({
         collector: r.collector,
@@ -202,6 +204,24 @@ async function cmdScrape(): Promise<void> {
       process.stdout.write(`  🔧 Healing ${collector.vendor_display.padEnd(16)} (${collector.collector_id}) ... `);
       const healId = startHeal(db, collector.vendor, collector.collector_id, reason);
 
+      // Two repair paths:
+      //  - collector has no template at all (or is disabled) → queue AI
+      //    template generation; nothing to refactor yet
+      //  - otherwise → refactor the existing template (classic heal)
+      const needsTemplate = /does not have a template|collector disabled/i.test(reason);
+      if (needsTemplate) {
+        const queued = await generateTemplate(collector.collector_id, collector.url);
+        if (!queued) {
+          finishHeal(db, healId, 'failed', null, 'Template generation request failed');
+          console.log('❌ template generation request failed');
+          continue;
+        }
+        finishHeal(db, healId, 'healed', null);
+        console.log('✅ template generation queued (takes 5–15 min server-side)');
+        console.log('     → next run of the daily cron will verify with a real trigger');
+        continue; // no point re-running before the template exists
+      }
+
       const interactionId = await healCollector(collector.collector_id, healPrompt);
       if (!interactionId) {
         finishHeal(db, healId, 'failed', null, 'Heal API returned null');
@@ -209,18 +229,30 @@ async function cmdScrape(): Promise<void> {
         continue;
       }
 
-      // Wait for the AI refactor to actually finish before approving,
+      // Wait for the AI refactor to reach its approval gate before approving,
       // so we never approve a half-written template.
-      const healReady = await waitForHealReady(collector.collector_id);
-      if (!healReady) {
-        console.log('\n  ⚠️  heal did not report ready in time');
+      const gate = await waitForHealApproval(collector.collector_id);
+      if (gate === 'failed') {
+        finishHeal(db, healId, 'failed', interactionId, 'Self-healing job failed');
+        console.log(`❌ self-healing job failed (${interactionId})`);
+        continue;
+      }
+      if (gate === 'timeout') {
+        // Never approve a job that hasn't reached its gate — approving early
+        // fails server-side and can kill the in-flight refactor. Leave it
+        // pending; the next daily run picks it up.
+        finishHeal(db, healId, 'healed', interactionId, 'Approval gate not reached in time; left for next run');
+        console.log(`⚠️ heal submitted but gate not reached in time (${interactionId}) — next run will verify`);
+        continue;
       }
 
-      const approved = await approveHeal(collector.collector_id);
-      if (!approved) {
-        finishHeal(db, healId, 'healed', interactionId, 'Auto-approve failed');
-        console.log(`⚠️ healed but approve failed (${interactionId})`);
-        continue;
+      if (gate === 'approve') {
+        const approved = await approveHeal(collector.collector_id);
+        if (!approved) {
+          finishHeal(db, healId, 'healed', interactionId, 'Auto-approve failed');
+          console.log(`⚠️ healed but approve failed (${interactionId})`);
+          continue;
+        }
       }
       finishHeal(db, healId, 'approved', interactionId);
       console.log(`✅ healed & approved (${interactionId})`);
@@ -345,6 +377,98 @@ async function cmdWatch(rest: string[]): Promise<void> {
   console.log('\nTip: set ALERT_WATCH_ONLY=true to alert only on watch matches.\n');
 }
 
+/**
+ * On-demand heal of one vendor, using the exact same production code path
+ * the daily cron uses (HTTP refactor_template → wait → approve → re-run).
+ *
+ *   npm run heal -- mistral
+ *   npm run heal -- mistral "change_type returns null since they restructured"
+ */
+async function cmdHeal(rest: string[]): Promise<void> {
+  const db = getDb();
+  const vendor = rest[0];
+  if (!vendor) {
+    console.error('Usage: npm run heal -- <vendor> ["description of what broke"]');
+    process.exitCode = 1;
+    return;
+  }
+
+  const collectors = await loadCollectors();
+  const collector = collectors.find(c => c.vendor === vendor);
+  if (!collector) {
+    console.error(`❌ No enabled collector for vendor "${vendor}". Check collectors.json.`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const whatBroke = rest.slice(1).join(' ').trim();
+  const reason = whatBroke || 'Manual heal requested from the CLI';
+
+  console.log(`\n🩺 Healing ${collector.vendor_display} (${collector.collector_id})`);
+  console.log(`   Reason: ${reason}\n`);
+
+  const healId = startHeal(db, collector.vendor, collector.collector_id, reason);
+  const healPrompt =
+    `The scrape of ${collector.vendor_display}'s changelog at ${collector.url} is broken or degraded. ` +
+    `Re-inspect the page and fix the extraction to return: title, date (YYYY-MM-DD), ` +
+    `change_type (added/changed/deprecated/removed/fixed), version, description, url for every entry. ` +
+    (whatBroke ? `What broke: ${whatBroke}. ` : '') +
+    'Same output schema as before.';
+
+  const interactionId = await healCollector(collector.collector_id, healPrompt);
+  if (!interactionId) {
+    finishHeal(db, healId, 'failed', null, 'Heal API returned null');
+    console.error('❌ Heal request failed.');
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`  Heal job: ${interactionId} — waiting for the approval gate...`);
+  const gate = await waitForHealApproval(collector.collector_id);
+  if (gate === 'failed') {
+    finishHeal(db, healId, 'failed', interactionId, 'Self-healing job failed');
+    console.error('❌ Self-healing job failed.');
+    process.exitCode = 1;
+    return;
+  }
+  if (gate === 'timeout') {
+    finishHeal(db, healId, 'healed', interactionId, 'Approval gate not reached in time');
+    console.log(`⚠️ Heal submitted (${interactionId}) but the approval gate wasn't reached. Re-run later: bdata scraper approve ${collector.collector_id}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (gate === 'approve') {
+    const approved = await approveHeal(collector.collector_id);
+    if (!approved) {
+      finishHeal(db, healId, 'healed', interactionId, 'Approve failed');
+      console.log(`⚠️ Healed but approve failed (${interactionId}). Run: bdata scraper approve ${collector.collector_id}`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+  finishHeal(db, healId, 'approved', interactionId);
+  console.log(`✅ Healed & approved (${interactionId})\n`);
+
+  // Verify with a real re-run on the same c_* ID.
+  process.stdout.write(`🔄 Re-running ${collector.vendor_display} to verify ... `);
+  const runId = startRun(db, collector.vendor, collector.collector_id);
+  try {
+    const dataset = await runCollector(collector, { timeoutMs: 180_000 });
+    const partialReason = detectPartialFailure(dataset);
+    const changes = normalizeDataset(dataset, collector);
+    upsertChanges(db, changes);
+    finishRun(db, runId, 'success', changes.length);
+    console.log(`✅ ${changes.length} rows recovered`);
+    if (partialReason) console.log(`   ⚠️  still partially degraded: ${partialReason}`);
+  } catch (err) {
+    finishRun(db, runId, 'failed', 0, (err as Error).message);
+    console.log(`❌ re-run failed: ${(err as Error).message.slice(0, 80)}`);
+    process.exitCode = 1;
+  }
+  console.log();
+}
+
 async function cmdAll(): Promise<void> {
   await cmdScrape();
   await cmdDiff();
@@ -360,8 +484,9 @@ async function main(): Promise<void> {
       case 'alert':     await cmdAlert(); break;
       case 'all':       await cmdAll(); break;
       case 'watch':     await cmdWatch(args.slice(1)); break;
+      case 'heal':      await cmdHeal(args.slice(1)); break;
       default:
-        console.error(`Unknown command: ${command}. Use: scrape | diff | alert | all | watch`);
+        console.error(`Unknown command: ${command}. Use: scrape | diff | alert | all | watch | heal`);
         process.exit(1);
     }
   } catch (err) {

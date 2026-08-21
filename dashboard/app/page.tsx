@@ -78,7 +78,7 @@ export default function HomePage() {
           ONE <span className="stroke-word">SIGNAL.</span>
         </h1>
         <p className="mt-5 max-w-xl text-sm leading-relaxed text-ink-dim sm:text-base">
-          ModelPulse watches the changelogs of 20+ AI vendors every day, diffs them week-over-week
+          ModelPulse watches the changelogs of 10 AI vendors every day, diffs them week-over-week
           and flags anything that can break your build — deprecations, removals, silent parameter
           shifts.
         </p>

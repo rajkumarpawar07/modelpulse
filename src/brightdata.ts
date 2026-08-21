@@ -58,6 +58,21 @@ export async function runCollector(
     throw new Error(`Failed to trigger collector ${collector.vendor}: ${(err as Error).message}`);
   }
 
+  if (triggerRes.statusCode >= 500) {
+    // Transient server error — one retry after a short backoff.
+    await triggerRes.body.dump();
+    console.warn(`  ⚠️  ${collector.vendor}: trigger HTTP ${triggerRes.statusCode} (transient), retrying in 15s...`);
+    await sleep(15_000);
+    triggerRes = await request(triggerUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(triggerBody),
+    });
+  }
+
   if (triggerRes.statusCode >= 400) {
     const body = await triggerRes.body.text();
     throw new Error(`Trigger failed for ${collector.vendor} (HTTP ${triggerRes.statusCode}): ${body}`);
@@ -90,6 +105,13 @@ export async function runCollector(
 
     if (datasetRes.statusCode === 202) {
       // Still processing
+      continue;
+    }
+
+    if ([502, 503, 504].includes(datasetRes.statusCode)) {
+      // Transient gateway error — the job is usually still running.
+      await datasetRes.body.dump();
+      console.warn(`  ⚠️  ${collector.vendor}: dataset HTTP ${datasetRes.statusCode} (transient), retrying...`);
       continue;
     }
 
@@ -190,11 +212,12 @@ export async function loadCollectors(): Promise<Collector[]> {
 
 /**
  * Heal a broken collector via POST /dca/collectors/{id}/refactor_template.
- * Returns the interaction_id on success, or null if the API call fails.
+ * Body: {"prompt": "<what broke>", "custom_input": []} (prompt max 1000 chars).
+ * Returns the job/interaction id on success, or null if the API call fails.
  */
 export async function healCollector(
   collectorId: string,
-  description: string,
+  prompt: string,
 ): Promise<string | null> {
   const healUrl = `${BRIGHTDATA_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/refactor_template`;
   try {
@@ -204,7 +227,7 @@ export async function healCollector(
         'Authorization': `Bearer ${apiKey()}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ description }),
+      body: JSON.stringify({ prompt: prompt.slice(0, 1000), custom_input: [] }),
     });
 
     if (res.statusCode >= 400) {
@@ -213,8 +236,8 @@ export async function healCollector(
       return null;
     }
 
-    const json = (await res.body.json()) as { id?: string; interaction_id?: string };
-    return json.id || json.interaction_id || 'heal-submitted';
+    const json = (await res.body.json().catch(() => ({}))) as { id?: string; interaction_id?: string; job_id?: string };
+    return json.id || json.interaction_id || json.job_id || 'heal-submitted';
   } catch (err) {
     console.error(`  ❌ Heal request error for ${collectorId}: ${(err as Error).message}`);
     return null;
@@ -222,61 +245,71 @@ export async function healCollector(
 }
 
 /**
- * Wait for a heal (template refactor) to finish before approving.
+ * Wait for a self-healing job to reach its approval gate.
  *
- * Polls GET /dca/collectors/{id} until the collector reports an idle/ready
- * state rather than a running/pending one. The API shape varies, so this is
- * defensive: unknown shapes are treated as ready after a minimum settle
- * delay, and the function never throws — worst case it returns false and the
- * caller approves anyway (matching the previous behavior).
+ * Polls GET /dca/collectors/{id}/refactor_template/progress until the job
+ * reports status "pending_answer" (step "user_approval") — the point where
+ * the proposed template diff is ready to be approved — or a terminal state.
+ *
+ * Returns 'approve' when the gate is reached, 'done' when the job finished
+ * without needing approval, 'failed' on a terminal error, and 'timeout' if
+ * the job never reported a gate within the window.
  */
-export async function waitForHealReady(
+export async function waitForHealApproval(
   collectorId: string,
   opts: { pollIntervalMs?: number; timeoutMs?: number } = {},
-): Promise<boolean> {
-  const { pollIntervalMs = 5000, timeoutMs = 180_000 } = opts;
+): Promise<'approve' | 'done' | 'failed' | 'timeout'> {
+  const { pollIntervalMs = 5000, timeoutMs = 300_000 } = opts;
+  const progressUrl = `${BRIGHTDATA_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/refactor_template/progress`;
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
     await sleep(pollIntervalMs);
     try {
-      const res = await request(`${BRIGHTDATA_BASE}/dca/collectors/${encodeURIComponent(collectorId)}`, {
+      const res = await request(progressUrl, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${apiKey()}` },
       });
+      if (res.statusCode === 404) {
+        await res.body.dump();
+        // No progress endpoint / no active job — nothing to wait for.
+        return 'done';
+      }
       if (res.statusCode >= 400) {
         await res.body.dump();
-        // Endpoint not available for this account/shape — fall back to settle delay.
-        await sleep(Math.max(0, 15_000 - (Date.now() - startedAt)));
-        return true;
+        continue; // transient error — keep polling
       }
-      const json = (await res.body.json()) as Record<string, unknown>;
-      const state = json.collector_status ?? json.status ?? json.state;
-      if (typeof state === 'string') {
-        const s = state.toLowerCase();
-        if (['running', 'pending', 'building', 'processing', 'refactoring', 'drafting'].some(x => s.includes(x))) {
-          continue; // still working — keep polling
-        }
-        if (['ready', 'idle', 'complete', 'completed', 'approved', 'active', 'draft'].some(x => s.includes(x))) {
-          return true;
-        }
+      const json = (await res.body.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!json) continue;
+
+      const status = String(json.status ?? '').toLowerCase();
+      const step = String(json.step ?? '').toLowerCase();
+
+      if (status === 'pending_answer' || step === 'user_approval' || status === 'awaiting_approval') {
+        return 'approve';
       }
-      // Got a payload but no recognizable state — settle briefly and accept.
-      await sleep(pollIntervalMs);
-      return true;
+      if (['done', 'completed', 'success', 'finished'].includes(status)) {
+        return 'done';
+      }
+      if (['failed', 'error', 'cancelled', 'canceled'].includes(status)) {
+        return 'failed';
+      }
+      // Anything else (running/building/...) — keep polling.
     } catch {
       // Transient network error — keep polling until timeout.
     }
   }
-  return false; // timed out; caller decides whether to approve anyway
+  return 'timeout';
 }
 
 /**
- * Approve a pending heal via POST /dca/collectors/{id}/approve.
- * Returns true on success.
+ * Approve a pending self-healing job via
+ * POST /dca/collectors/{id}/resume_automation_job
+ * with {"message": true, "auto_save": true} — the API equivalent of
+ * `bdata scraper approve`.
  */
 export async function approveHeal(collectorId: string): Promise<boolean> {
-  const approveUrl = `${BRIGHTDATA_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/approve`;
+  const approveUrl = `${BRIGHTDATA_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/resume_automation_job`;
   try {
     const res = await request(approveUrl, {
       method: 'POST',
@@ -284,7 +317,7 @@ export async function approveHeal(collectorId: string): Promise<boolean> {
         'Authorization': `Bearer ${apiKey()}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ message: true, auto_save: true }),
     });
 
     if (res.statusCode >= 400) {
@@ -296,6 +329,51 @@ export async function approveHeal(collectorId: string): Promise<boolean> {
     return true;
   } catch (err) {
     console.error(`  ❌ Approve error for ${collectorId}: ${(err as Error).message}`);
+    return false;
+  }
+}
+
+/**
+ * Queue AI template generation for a collector whose template is missing or
+ * was never finished (trigger fails with "Collector does not have a template").
+ * POST /dca/collectors/{id}/automate_template with {"urls": [url]}.
+ * Generation runs server-side (5–15 min); poll by triggering the collector.
+ */
+export async function generateTemplate(collectorId: string, url: string): Promise<boolean> {
+  const genUrl = `${BRIGHTDATA_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/automate_template`;
+  // Max 3 concurrent generations per account — back off on 429 until a slot frees.
+  const MAX_ATTEMPTS = 5;
+  try {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const res = await request(genUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ urls: [url] }),
+      });
+
+      if (res.statusCode === 429) {
+        await res.body.dump();
+        if (attempt === MAX_ATTEMPTS) break;
+        console.log(`(429, attempt ${attempt}/${MAX_ATTEMPTS}, waiting 60s for a generation slot)`);
+        await sleep(60_000);
+        continue;
+      }
+
+      if (res.statusCode >= 400) {
+        const body = await res.body.text();
+        console.error(`  ❌ Template generation failed for ${collectorId} (HTTP ${res.statusCode}): ${body.slice(0, 200)}`);
+        return false;
+      }
+      await res.body.dump();
+      return true;
+    }
+    console.error(`  ❌ Template generation still rate-limited after ${MAX_ATTEMPTS} attempts for ${collectorId}`);
+    return false;
+  } catch (err) {
+    console.error(`  ❌ Template generation error for ${collectorId}: ${(err as Error).message}`);
     return false;
   }
 }

@@ -128,13 +128,25 @@ export function getCollectorHealth(): CollectorHealthRow[] {
   const d = db();
 
   let declared: Array<{ vendor: string; vendor_display: string; collector_id: string; enabled: boolean }> = [];
+  // Try a few plausible locations for collectors.json (dev server, CI, deploy).
+  const candidates: string[] = [];
   try {
-    // ../../collectors.json relative to this file, regardless of cwd.
     const here = dirname(fileURLToPath(import.meta.url));
-    const raw = JSON.parse(readFileSync(join(here, "..", "..", "..", "collectors.json"), "utf-8"));
-    declared = raw.collectors;
+    candidates.push(join(here, "..", "..", "..", "collectors.json"));
   } catch {
-    declared = [];
+    // import.meta unavailable (CJS bundle) — cwd paths below still apply.
+  }
+  candidates.push(join(process.cwd(), "..", "collectors.json"), join(process.cwd(), "collectors.json"));
+  for (const p of candidates) {
+    try {
+      const raw = JSON.parse(readFileSync(p, "utf-8"));
+      if (Array.isArray(raw.collectors)) {
+        declared = raw.collectors;
+        break;
+      }
+    } catch {
+      // try next candidate
+    }
   }
 
   const runStats = d.prepare(`
@@ -165,7 +177,16 @@ export function getCollectorHealth(): CollectorHealthRow[] {
         vendor_display: c.vendor_display,
         collector_id: c.collector_id,
       }))
-    : (d.prepare(`SELECT DISTINCT vendor, vendor_display, collector_id FROM runs ORDER BY vendor`).all() as any[])
+    : // Fallback when collectors.json isn't readable: derive from run history.
+      (d
+        .prepare(
+          `SELECT DISTINCT vendor, MAX(collector_id) AS collector_id FROM runs GROUP BY vendor ORDER BY vendor`
+        )
+        .all() as any[]).map((r: any) => ({
+        vendor: r.vendor,
+        vendor_display: r.vendor,
+        collector_id: r.collector_id,
+      }))
   ).map((c: any) => {
     const r = runBy.get(c.vendor) || {} as any;
     const h = healBy.get(c.vendor) || {} as any;

@@ -5,7 +5,7 @@
 ModelPulse is a four-stage pipeline:
 
 ```
-Scraper Studio (20 collectors)  →  Normalize  →  Diff  →  Alert
+Scraper Studio (10 collectors)  →  Normalize  →  Diff  →  Alert
        ↓                              ↓           ↓        ↓
    raw JSON                       SQLite       week-over- Slack/
                                                    week   Discord
@@ -71,7 +71,7 @@ The scraper needs to write to SQLite; the dashboard only reads from it. We separ
 
 - Bright Data free tier: 5,000 credits/month
 - Each `bdata scraper run` against a small page ≈ 1 credit
-- 20 collectors × 1 run/day × 30 days = 600 credits/month
+- 10 collectors × 1 run/day × 30 days = 300 credits/month
 - Plus the $50 promo credits = **months of runway**
 
 ## Scaling notes

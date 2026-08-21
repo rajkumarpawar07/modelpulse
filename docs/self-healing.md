@@ -23,7 +23,9 @@ With `bdata scraper heal`:
 
 ## The demo transcript
 
-Below is the literal terminal session for the Mistral collector. Adapt the vendor if Mistral hasn't actually broken recently — pick whichever vendor has the most volatile page when you record.
+Below is an illustrative walkthrough of the flow (for a real, timestamped heal
+with actual API responses, see [`live-heal-log.md`](./live-heal-log.md)). Adapt
+the vendor to whichever has the most volatile page when you record.
 
 ### Step 1: Run the current scraper
 
@@ -106,27 +108,33 @@ Same `c_*` ID. Same output structure. **The scraper that fixes itself.**
 
 ## The script
 
-`scripts/demo-heal.sh` automates the above for screen recording. It:
+`npm run demo:heal` walks through the flow for screen recording. Every step runs **real commands
+against a real collector** — nothing is staged or simulated:
 
-1. Picks the first non-placeholder collector (Mistral by default; edit the `VENDOR=` line to switch)
-2. Walks through each step with a 3-second pause so you can re-record cleanly
-3. Press ENTER between steps to control the pace
+1. `VENDOR_FILTER=<vendor> npm run scrape` — live run, showing the detection logic
+2. `npm run heal -- <vendor> "<what broke>"` — the production heal command
+3. Re-run of the same collector to show the recovered data
 
-To run:
-
-```bash
-npm run demo:heal
-```
+If the vendor hasn't actually broken, the heal still runs for real (re-inspection
+and re-approval of the template); when a vendor *has* genuinely changed, the
+daily cron performs this same loop with no human involved at all.
 
 ## Staging a real break
 
-If Mistral (or whichever vendor you pick) hasn't actually changed their page recently, you'll need to either:
+Don't stage fake output — judges can tell. The honest options:
 
-**Option A — wait for a real break.** The hackathon runs Aug 17-23. With 20 collectors running daily, the odds of a real change are high. If you spot one, just point the demo at that vendor.
+**Option A — wait for a real break.** With 10 collectors running daily, layout
+drift is common. When detection fires, the cron heals it on its own; the heal
+shows up in the `heals` table and on the dashboard's `/health` page — that's
+your evidence, timestamped.
 
-**Option B — stage a fake break.** Don't do this; judges can tell. The whole point of the demo is that it's real.
+**Option B — use a real past break.** [`live-heal-log.md`](./live-heal-log.md)
+is the transcript of an actual heal we performed on the OpenAI collector when
+real data revealed partial dates and missing titles. That's the proof artifact.
 
-**Option C — use an existing known break.** Search "[vendor] changelog redesign 2024/2025" on Google. If you find one, point the demo at that vendor and the heal prompt you write is realistic.
+**Option C — run the production heal live.** `npm run heal -- <vendor> "reason"`
+goes through the identical code path the cron uses (refactor_template → poll →
+approve → re-run). It's a real heal whether or not the site changed today.
 
 ## Why this wins the grand prize
 
@@ -136,23 +144,31 @@ The hackathon's **Web-Slinger (Best Use of Bright Data)** track says:
 
 This demo hits **all four** clauses in 90 seconds. The collector ID staying the same is the line the judges will quote in the winner announcement.
 
-## The next level: auto self-heal
+## The next level: auto self-heal (implemented)
 
-For bonus points, add a GitHub Action that runs `bdata scraper heal` automatically when the daily scrape returns fewer than expected rows. Pseudocode:
+This is not pseudocode — it ships. The daily GitHub Actions cron runs
+`npm run scrape` with `AUTO_HEAL=true`, and `src/cli.ts` runs the whole loop
+on its own:
 
-```yaml
-- name: Scrape
-  id: scrape
-  run: npm run scrape
+1. **Detect** — after every scrape, each collector is checked for three
+   failure signals: hard errors, 0 rows, and *partial breakage* (rows return
+   but `title`/`date`/`change_type` is missing from a majority of entries —
+   `detectPartialFailure()` in `src/normalize.ts`). Partial breakage is the
+   classic post-redesign failure mode where naive 0-row checks stay silent.
+2. **Circuit-break** — a vendor with 3+ consecutive failed runs is skipped
+   (healing a dead site just burns credits) and surfaced on `/health`.
+3. **Heal** — `POST /dca/collectors/{c_*}/refactor_template` with a prompt
+   describing what broke (or `automate_template` to regenerate a collector
+   whose template never finished generating — a distinct failure mode the
+   pipeline detects from the trigger 403).
+4. **Wait** — poll `GET /dca/collectors/{id}/refactor_template/progress`
+   until the job reaches its approval gate (`status: pending_answer`), so a
+   half-written template is never approved (`waitForHealApproval()` in
+   `src/brightdata.ts`).
+5. **Approve & re-run** — `POST .../resume_automation_job` with
+   `{"message": true, "auto_save": true}`, then re-run the same `c_*`
+   collector (up to 2 attempts) and upsert the recovered rows.
 
-- name: Auto-heal if any vendor returned 0 rows
-  if: steps.scrape.outputs.failures > 0
-  run: |
-    for vendor in $(cat .failed_vendors); do
-      cid=$(jq -r ".collectors[] | select(.vendor==\"$vendor\") | .collector_id" collectors.json)
-      bdata scraper heal "$cid" "The latest scrape returned 0 rows; the site may have changed. Re-inspect the page and fix the schema." --url "..."
-      bdata scraper approve "$cid"
-    done
-```
-
-This is the "zero maintenance" mode Bright Data is building. You can ship a stripped-down version in 30 minutes of work. The judges will love it.
+Every attempt is recorded in the `heals` table with its trigger reason, status,
+and interaction ID — rendered on the dashboard's `/health` page. On-demand,
+the same path is available as `npm run heal -- <vendor> "what broke"`.
