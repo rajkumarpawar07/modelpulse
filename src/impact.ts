@@ -16,16 +16,16 @@ const TYPE_BASE: Record<ChangeType, number> = {
 };
 
 const RISK_KEYWORDS: Array<[RegExp, number]> = [
-  [/\b(breaking|migrat|incompat)\b/i, 18],
-  [/\b(deprecat|sunset|retire|end[- ]of[- ]life|eol)\b/i, 20],
-  [/\b(remov|discontinu|shut ?down)\b/i, 20],
-  [/\b(auth|api[_ ]?key|token|oauth|permission)\b/i, 15],
-  [/\b(rate[_ ]?limit|throttl|quota|429)\b/i, 12],
-  [/\b(pric|cost|billing|charge)\b/i, 12],
-  [/\b(context window|max tokens?|token limit)\b/i, 10],
-  [/\b(latency|timeout|uptime)\b/i, 8],
-  [/\b(error|fail|bug|regression)\b/i, 6],
-  [/\b(sdk|library|client)\b/i, 5],
+  [/\b(breaking|migrat|incompat)/i, 18],
+  [/\b(deprecat|sunset|retire|end[- ]of[- ]life|\beol\b)/i, 20],
+  [/\b(remov|discontinu|shut ?down)/i, 20],
+  [/\b(auth|api[_ ]?key|token|oauth|permission)/i, 15],
+  [/\b(rate[_ ]?limit|throttl|quota|\b429\b)/i, 12],
+  [/\b(pric|cost|billing|charge)/i, 12],
+  [/\b(context window|max tokens?|token limit)/i, 10],
+  [/\b(latency|timeout|uptime)/i, 8],
+  [/\b(error|fail|bug|regression)/i, 6],
+  [/\b(sdk|library|client)/i, 5],
 ];
 
 export function scoreImpact(c: Change): number {

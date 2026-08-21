@@ -1,7 +1,8 @@
 name: Daily ModelPulse Scrape
 
-# Runs the full ModelPulse pipeline once a day at 09:00 UTC = 14:30 IST.
-# Also runs on push to main (for quick smoke tests) and on manual trigger.
+# Runs the full ModelPulse pipeline once a day at 09:00 UTC.
+# Includes auto-heal: if any collector fails, the pipeline attempts to
+# heal and re-run it automatically. Same c_* collector IDs throughout.
 on:
   schedule:
     - cron: "0 9 * * *"
@@ -18,6 +19,9 @@ concurrency:
   group: modelpulse-scrape
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -26,7 +30,9 @@ jobs:
       BRIGHT_DATA_API_KEY: ${{ secrets.BRIGHT_DATA_API_KEY }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       DATABASE_PATH: ./data/modelpulse.db
+      AUTO_HEAL: "true"
     steps:
       - uses: actions/checkout@v4
 
@@ -39,7 +45,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run the full pipeline
+      - name: Run tests
+        run: npm test
+
+      - name: Run the full pipeline (scrape → auto-heal → diff → alert)
         run: npm run all
 
       - name: Upload raw outputs (debug)
@@ -49,6 +58,23 @@ jobs:
           name: modelpulse-raw
           path: raw/
           retention-days: 7
+
+      # Commit the database back so history accumulates across runs and the
+      # deployed dashboard always serves fresh data. The push paths filter
+      # above (src/**, collectors.json, workflow) means this data commit
+      # does not re-trigger the workflow.
+      - name: Commit updated database
+        if: success()
+        run: |
+          git config user.name "modelpulse-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/modelpulse.db
+          if git diff --cached --quiet; then
+            echo "No database changes to commit."
+          else
+            git commit -m "chore(data): daily scrape update [skip ci]"
+            git push
+          fi
 
       - name: Upload database snapshot
         if: always()

@@ -1,5 +1,11 @@
 # Add this file to any repo that builds on AI vendor APIs.
 # Fails the workflow when ModelPulse saw breaking changes in the last 7 days.
+#
+# Setup (one time):
+#   1. Copy ci/check-breaking.mjs from the modelpulse repo into your repo
+#      (e.g. to .github/modelpulse/check-breaking.mjs). Vendoring the script
+#      means CI never executes remote code — you review every change to it.
+#   2. Add your ModelPulse instance URL as the MODEL_PULSE_URL secret.
 name: ModelPulse breaking-change check
 
 on:
@@ -19,7 +25,4 @@ jobs:
           MODEL_PULSE_DAYS: "7"
           # MODEL_PULSE_VENDOR: openai   # optional: only watch one vendor
           MODEL_PULSE_MODE: fail         # fail | warn
-        run: |
-          node <<'EOF'
-          $(curl -s https://raw.githubusercontent.com/yourusername/modelpulse/main/ci/check-breaking.mjs)
-          EOF
+        run: node .github/modelpulse/check-breaking.mjs

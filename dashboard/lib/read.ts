@@ -1,4 +1,4 @@
-import { getLatestChanges, getChangesForVendor, getStats, getWatches } from "./db";
+import { getLatestChanges, getChangesForVendor, getStats, getWatches, getCollectorHealth, getHeals } from "./db";
 
 export function readLatestChanges(limit = 50) {
   try {
@@ -36,6 +36,24 @@ export function readWatches() {
   try {
     return getWatches();
   } catch {
+    return [];
+  }
+}
+
+export function readCollectorHealth() {
+  try {
+    return getCollectorHealth();
+  } catch (err) {
+    console.warn("[modelpulse] collector health unavailable:", err);
+    return [];
+  }
+}
+
+export function readHeals(limit = 25) {
+  try {
+    return getHeals(limit);
+  } catch (err) {
+    console.warn("[modelpulse] heal history unavailable:", err);
     return [];
   }
 }

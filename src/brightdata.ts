@@ -1,7 +1,7 @@
 /**
- * scrape.ts — Bright Data Scraper Studio API client.
+ * brightdata.ts — Bright Data Scraper Studio API client.
  *
- * Two endpoints we use directly (instead of the CLI, so we can run from
+ * The endpoints we call directly (instead of the CLI, so we can run from
  * GitHub Actions without needing npx and the interactive login):
  *
  *   POST /dca/trigger?collector=c_xxx
@@ -11,8 +11,9 @@
  *   GET /dca/dataset?id=j_xxx
  *     returns: a JSON array of rows (or pending status until ready)
  *
- * We also use /dca/trigger_immediate for single-URL real-time mode
- * (faster, used for testing).
+ *   POST /dca/collectors/{id}/refactor_template  (heal)
+ *   GET  /dca/collectors/{id}                    (heal/collector status)
+ *   POST /dca/collectors/{id}/approve            (approve the healed template)
  */
 import { request } from 'undici';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
@@ -155,7 +156,7 @@ function sleep(ms: number): Promise<void> {
  *   - {"status": "building|pending|...", ...} while processing
  * Normalize all of these to an array (or null = keep waiting).
  */
-function unwrapDataset(parsed: unknown): Dataset | null {
+export function unwrapDataset(parsed: unknown): Dataset | null {
   if (Array.isArray(parsed)) return parsed;
   if (parsed && typeof parsed === 'object') {
     const obj = parsed as Record<string, unknown>;
@@ -185,4 +186,116 @@ export async function loadCollectors(): Promise<Collector[]> {
   }
 
   return collectors;
+}
+
+/**
+ * Heal a broken collector via POST /dca/collectors/{id}/refactor_template.
+ * Returns the interaction_id on success, or null if the API call fails.
+ */
+export async function healCollector(
+  collectorId: string,
+  description: string,
+): Promise<string | null> {
+  const healUrl = `${BRIGHTDATA_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/refactor_template`;
+  try {
+    const res = await request(healUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ description }),
+    });
+
+    if (res.statusCode >= 400) {
+      const body = await res.body.text();
+      console.error(`  ❌ Heal API failed for ${collectorId} (HTTP ${res.statusCode}): ${body.slice(0, 200)}`);
+      return null;
+    }
+
+    const json = (await res.body.json()) as { id?: string; interaction_id?: string };
+    return json.id || json.interaction_id || 'heal-submitted';
+  } catch (err) {
+    console.error(`  ❌ Heal request error for ${collectorId}: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+/**
+ * Wait for a heal (template refactor) to finish before approving.
+ *
+ * Polls GET /dca/collectors/{id} until the collector reports an idle/ready
+ * state rather than a running/pending one. The API shape varies, so this is
+ * defensive: unknown shapes are treated as ready after a minimum settle
+ * delay, and the function never throws — worst case it returns false and the
+ * caller approves anyway (matching the previous behavior).
+ */
+export async function waitForHealReady(
+  collectorId: string,
+  opts: { pollIntervalMs?: number; timeoutMs?: number } = {},
+): Promise<boolean> {
+  const { pollIntervalMs = 5000, timeoutMs = 180_000 } = opts;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    await sleep(pollIntervalMs);
+    try {
+      const res = await request(`${BRIGHTDATA_BASE}/dca/collectors/${encodeURIComponent(collectorId)}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${apiKey()}` },
+      });
+      if (res.statusCode >= 400) {
+        await res.body.dump();
+        // Endpoint not available for this account/shape — fall back to settle delay.
+        await sleep(Math.max(0, 15_000 - (Date.now() - startedAt)));
+        return true;
+      }
+      const json = (await res.body.json()) as Record<string, unknown>;
+      const state = json.collector_status ?? json.status ?? json.state;
+      if (typeof state === 'string') {
+        const s = state.toLowerCase();
+        if (['running', 'pending', 'building', 'processing', 'refactoring', 'drafting'].some(x => s.includes(x))) {
+          continue; // still working — keep polling
+        }
+        if (['ready', 'idle', 'complete', 'completed', 'approved', 'active', 'draft'].some(x => s.includes(x))) {
+          return true;
+        }
+      }
+      // Got a payload but no recognizable state — settle briefly and accept.
+      await sleep(pollIntervalMs);
+      return true;
+    } catch {
+      // Transient network error — keep polling until timeout.
+    }
+  }
+  return false; // timed out; caller decides whether to approve anyway
+}
+
+/**
+ * Approve a pending heal via POST /dca/collectors/{id}/approve.
+ * Returns true on success.
+ */
+export async function approveHeal(collectorId: string): Promise<boolean> {
+  const approveUrl = `${BRIGHTDATA_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/approve`;
+  try {
+    const res = await request(approveUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (res.statusCode >= 400) {
+      const body = await res.body.text();
+      console.error(`  ❌ Approve failed for ${collectorId} (HTTP ${res.statusCode}): ${body.slice(0, 200)}`);
+      return false;
+    }
+    await res.body.dump();
+    return true;
+  } catch (err) {
+    console.error(`  ❌ Approve error for ${collectorId}: ${(err as Error).message}`);
+    return false;
+  }
 }

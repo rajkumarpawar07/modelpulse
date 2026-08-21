@@ -1,8 +1,8 @@
 /**
  * ModelPulse — core types
  *
- * These types describe the unified schema that ALL 20+ Scraper Studio
- * collectors normalize into. Vendor-specific weirdness gets squashed here.
+ * These types describe the unified schema that every Scraper Studio
+ * collector normalizes into. Vendor-specific weirdness gets squashed here.
  *
  * The schema is intentionally simple. The dashboard reads from it. The
  * diff engine compares week-over-week snapshots of it. The alert formatter

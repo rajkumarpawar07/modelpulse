@@ -1,5 +1,5 @@
 {
-  "_comment": "Placeholder. Run scripts/create-collectors.sh to populate this with 20 real c_* IDs. The c_* IDs are stable — once created, never re-create them. If you want to add a new vendor, just add a new entry here and run bdata scraper create for that URL.",
+  "_comment": "10 live c_* collector IDs created via `bdata scraper create` (see scripts/create-collectors.sh). The c_* IDs are stable — once created, never re-create them. Add a new vendor by adding an entry and running bdata scraper create for that URL. Add `github_repo` to also ingest that vendor's SDK releases from GitHub.",
   "_schema": "Each collector entry has: vendor (kebab slug), vendor_display (UI label), vendor_homepage, collector_id (the c_* string), url (changelog URL), tier (1=must-have, 2=recommended, 3=stretch), enabled (boolean).",
   "collectors": [
     {
@@ -8,6 +8,7 @@
       "vendor_homepage": "https://openai.com",
       "collector_id": "c_mt35uk633yulmy4ui",
       "url": "https://platform.openai.com/docs/changelog",
+      "github_repo": "openai/openai-python",
       "tier": 1,
       "enabled": true
     },
@@ -17,6 +18,7 @@
       "vendor_homepage": "https://anthropic.com",
       "collector_id": "c_mt35zpsefr1p4nqoc",
       "url": "https://docs.anthropic.com/en/release-notes/overview",
+      "github_repo": "anthropics/anthropic-sdk-python",
       "tier": 1,
       "enabled": true
     },

@@ -2,7 +2,7 @@
 
 > Catch breaking changes in AI vendor APIs before your code does.
 
-ModelPulse watches **20+ public AI vendor changelog pages daily**, normalizes them into a single schema, and alerts you on Slack/Discord the moment a breaking change ships. Built for the [Scrape-Verse Hackathon](https://www.wemakedevs.org/hackathons/scrape-verse) with [Bright Data Scraper Studio](https://brightdata.com).
+ModelPulse watches **10 public AI vendor changelog pages daily**, normalizes them into a single schema, and alerts you on Slack/Discord the moment a breaking change ships. When a vendor redesigns their page, the pipeline **auto-heals itself** — no code change, no redeployment. Built for the [Scrape-Verse Hackathon](https://www.wemakedevs.org/hackathons/scrape-verse) with [Bright Data Scraper Studio](https://brightdata.com).
 
 ![ModelPulse dashboard](./docs/screenshot-dashboard.png)
 
@@ -23,24 +23,28 @@ Most developers find out from their error logs, not from the vendor. By then, pr
 
 A self-healing pipeline of Bright Data collectors that:
 
-1. Scrapes 20+ public AI vendor changelog pages daily (+ optional GitHub Releases per vendor)
+1. Scrapes 10 public AI vendor changelog pages daily (+ optional GitHub Releases per vendor)
 2. Normalizes them into one schema (SQLite), scored with a 0–100 **impact rating**
 3. Diffs week-over-week, flags new changes **and detects silent edits** to old ones
 4. Alerts via Slack/Discord/generic **webhooks** — optionally filtered by your **keyword watches**
 5. Exposes **RSS feeds** and a public **JSON API**, so CI can fail builds on breaking changes
-6. **Self-heals** when a vendor changes their changelog page layout — the same `c_*` collector ID, no downstream code change
+6. **Self-heals automatically** when a vendor changes their changelog page layout — detects breakage, triggers `bdata scraper heal`, and re-runs. Same `c_*` collector ID, no downstream code change, no human intervention
 
 ## Live demo
 
-- **Dashboard:** _deployed to Vercel / Railway during Day 2 of the build_
-- **Demo video:** _uploaded to YouTube, link in submission form_
+- **Dashboard:** [modelpulse.vercel.app](https://modelpulse.vercel.app) — the daily workflow commits the
+  updated SQLite database back to this repo, so a deployed dashboard always reads fresh data with full
+  history. Deploy your own with `cd dashboard && npx vercel`.
+- **Demo video:** [Watch on YouTube](https://youtube.com) _(link updated at submission)_
 - **Slack alert sample:** [`examples/slack-alert-sample.json`](./examples/slack-alert-sample.json)
+- **Real self-healing transcript:** [`docs/live-heal-log.md`](./docs/live-heal-log.md) — actual API calls, actual collector ID, actual fix
+- **Self-healing at a glance:** the dashboard's `/health` page shows collector uptime and the full auto-heal history
 
 ---
 
 ## How Bright Data Scraper Studio is used
 
-ModelPulse is built on **20 independent Scraper Studio collectors**, one per AI vendor. Each was created with a single `bdata scraper create` command:
+ModelPulse is built on **10 independent Scraper Studio collectors**, one per AI vendor. Each was created with a single `bdata scraper create` command:
 
 ```bash
 bdata scraper create https://platform.openai.com/docs/changelog \
@@ -53,21 +57,21 @@ Bright Data's AI Agent wrote the scraper code, returned a stable `c_*` collector
 bdata scraper run c_openai_xxx https://platform.openai.com/docs/changelog --pretty
 ```
 
-For the full list of all 20 collectors and the exact creation prompts, see [`scripts/create-collectors.sh`](./scripts/create-collectors.sh).
+For the full list of all 10 collectors and the exact creation prompts, see [`scripts/create-collectors.sh`](./scripts/create-collectors.sh).
 
 ### The three CLI commands at the heart of ModelPulse
 
 | Command | What it does | How ModelPulse uses it |
 |---------|--------------|------------------------|
-| `bdata scraper create` | Generate a scraper from a URL + natural-language description | One-time per vendor; creates our 20 collectors |
-| `bdata scraper run` | Execute a scraper on a URL and return structured data | Called by `npm run scrape` against all 20 collectors |
-| `bdata scraper heal` | Fix an existing scraper in place via AI self-healing | Called by `npm run demo:heal` to show the headline demo |
+| `bdata scraper create` | Generate a scraper from a URL + natural-language description | One-time per vendor; creates our 10 collectors |
+| `bdata scraper run` | Execute a scraper on a URL and return structured data | Called by `npm run scrape` against all 10 collectors |
+| `bdata scraper heal` | Fix an existing scraper in place via AI self-healing | Called automatically when a collector returns 0 rows, or manually via `npm run demo:heal` |
 
-Under the hood, the CLI maps to four Bright Data HTTP endpoints:
+Under the hood, the CLI maps to these Bright Data HTTP endpoints:
 - `POST /dca/collector` + `POST /dca/collectors/{c_*}/automate_template` (create)
-- `POST /dca/trigger_immediate` + `GET /dca/get_result` (run, small input)
-- `POST /dca/trigger` + `GET /dca/dataset?id=j_*` (run, large/batch input)
-- `POST /dca/collectors/{id}/refactor_template` (heal)
+- `POST /dca/trigger` + `GET /dca/dataset?id=j_*` (run)
+- `POST /dca/collectors/{id}/refactor_template` (heal) + `GET /dca/collectors/{id}` (poll until the refactor finishes)
+- `POST /dca/collectors/{id}/approve` (approve the healed template)
 
 See [`src/brightdata.ts`](./src/brightdata.ts) for our direct-HTTP client that calls these endpoints without the CLI (so it runs in GitHub Actions without an interactive login).
 
@@ -84,6 +88,18 @@ bdata scraper approve c_mistral_xxx
 
 **The `c_*` ID stays the same across heals.** No downstream code changes. See [`docs/self-healing.md`](./docs/self-healing.md) for the full demo transcript.
 
+#### The automated loop (production)
+
+`npm run scrape` runs the full detect → heal → approve → re-run loop without any human step:
+
+1. **Detect** — a collector that errors, returns **0 rows**, or returns rows where a required field (`title`, `date`, `change_type`) is missing from the majority of entries is flagged. That last check catches *partial breakage*: the classic post-redesign failure where rows still come back but the fields have quietly gone null.
+2. **Circuit-break** — if a vendor has failed 3+ runs in a row, healing is skipped (the site is probably down or gone, and repeated heals just burn credits). Visible on the `/health` dashboard page.
+3. **Heal** — `POST /dca/collectors/{id}/refactor_template` with a reason describing what broke.
+4. **Wait** — poll the collector until the AI refactor reports finished, so we never approve a half-written template.
+5. **Approve & re-run** — approve the healed template and re-run the same `c_*` collector (up to 2 attempts), with results upserted as usual.
+
+Every attempt is recorded in the `heals` table and rendered on the dashboard's `/health` page.
+
 ---
 
 ## Architecture
@@ -91,13 +107,13 @@ bdata scraper approve c_mistral_xxx
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                  GitHub Actions (cron)                      │
-│                  daily 09:00 UTC = 14:30 IST                │
+│                  daily 09:00 UTC                            │
 └─────────────────────┬───────────────────────────────────────┘
                       │
                       ▼
          ┌────────────────────────────┐
          │  src/cli.ts scrape         │
-         │  - Loop over 20 collectors │
+         │  - Loop over 10 collectors │
          │  - POST /dca/trigger       │
          │  - Poll /dca/dataset       │
          └────────────┬───────────────┘
@@ -135,6 +151,7 @@ The Next.js dashboard reads from the same SQLite database:
   /vendor/[slug]   → All changes for one vendor
   /timeline        → Visual timeline grouped by date
   /stats           → Top vendors, breaking-change frequency
+  /health          → Collector health + auto-heal history
 ```
 
 ---
@@ -151,7 +168,7 @@ The Next.js dashboard reads from the same SQLite database:
 ### One-command setup
 
 ```bash
-git clone <your-repo-url> modelpulse
+git clone https://github.com/rajkumarpawar07/modelpulse.git modelpulse
 cd modelpulse
 bash scripts/setup.sh
 ```
@@ -159,7 +176,7 @@ bash scripts/setup.sh
 The setup script will:
 1. Install Node deps
 2. Verify `bdata login`
-3. Create all 20 Scraper Studio collectors (≈15 min)
+3. Create all 10 Scraper Studio collectors (≈15 min)
 4. Write `.env` from the template
 5. Run the first scrape so you can see the pipeline working
 
@@ -176,9 +193,9 @@ npx -p @brightdata/cli bdata login
 cp .env.example .env
 # Edit .env: set BRIGHT_DATA_API_KEY and (optionally) SLACK_WEBHOOK_URL
 
-# 4. Create the 20 collectors
+# 4. Create the 10 collectors
 bash scripts/create-collectors.sh
-# → writes collectors.json with 20 c_* IDs
+# → writes collectors.json with 10 c_* IDs
 
 # 5. Run the full pipeline
 npm run all
@@ -194,16 +211,21 @@ npm run dev
 ### Useful commands
 
 ```bash
-npm run scrape        # Run all 20 collectors (+ GitHub Releases sources)
+npm run scrape        # Run all collectors (4 in parallel), auto-heal broken ones
 npm run diff          # Compute the week-over-week diff
 npm run alert         # Send the alert to Slack/Discord/webhook
 npm run all           # Full pipeline: scrape → diff → alert
 npm run watch -- add "rate limit"   # add a keyword watch
 npm run watch -- list               # list / remove watches
 npm run seed          # Populate demo data without scraping
-npm run demo:heal     # Stage the self-healing demo (run on Day 3)
+npm run demo:heal     # Run the self-healing demo
+npm test              # Run unit tests (Vitest)
 npm run typecheck     # TypeScript validation
 ```
+
+Tuning knobs (all optional env vars): `SCRAPE_CONCURRENCY` (default 4),
+`SCRAPE_TIMEOUT_MS` (default 300000), `HEAL_RERUN_ATTEMPTS` (default 2),
+`HEAL_MAX_CONSECUTIVE_FAILURES` (default 3, the circuit breaker).
 
 ---
 
@@ -257,13 +279,9 @@ Changelog entries get edited after publication — silently. Every scrape compar
 
 ### Multi-source ingestion (GitHub Releases)
 
-Any collector can also ingest GitHub Releases by adding one line in `collectors.json`:
-
-```json
-{ "vendor": "openai", "...": "...", "github_repo": "openai/openai-python" }
-```
-
-Releases flow through the same normalizer as scraped changelogs. Disable with `ENABLE_GITHUB=false`.
+Collectors for OpenAI and Anthropic also ingest their Python SDK release notes from GitHub Releases
+(`github_repo` in `collectors.json`), flowing through the same normalizer as scraped changelogs.
+Add `github_repo: "owner/name"` to any other collector entry to do the same. Disable with `ENABLE_GITHUB=false`.
 
 ### Generic webhooks (Zapier / Make / n8n)
 
@@ -282,10 +300,10 @@ Works with Zapier's *Catch Hook*, Make custom webhooks, n8n, or your own endpoin
 
 ### CI: fail builds on breaking changes
 
-Drop this into any repo that builds on AI vendor APIs — sample workflow in [`examples/modelpulse-check.yml`](./examples/modelpulse-check.yml):
+Drop this into any repo that builds on AI vendor APIs — sample workflow in [`examples/modelpulse-check.yml`](./examples/modelpulse-check.yml). Vendor `ci/check-breaking.mjs` into your repo (the sample workflow explains how) so CI never executes remote code:
 
 ```bash
-node ci/check-breaking.mjs
+node check-breaking.mjs
 # env:
 #   MODEL_PULSE_URL    — your ModelPulse instance
 #   MODEL_PULSE_DAYS   — look-back window (default 7)
@@ -305,10 +323,10 @@ modelpulse/
 ├── LICENSE                            # MIT
 ├── package.json                       # Node deps + scripts
 ├── tsconfig.json                      # TypeScript config
-├── collectors.json                    # 20 c_* collector IDs
+├── collectors.json                    # 10 c_* collector IDs
 ├── .env.example                       # template (copy to .env)
 ├── .gitignore
-├── IMPLEMENTATION.md                  # the full implementation guide
+├── vitest.config.ts                   # test config
 ├── src/                               # Node.js + TypeScript backend
 │   ├── types.ts                       # unified Change schema
 │   ├── db.ts                          # SQLite wrapper + watches + mutation diffing
@@ -323,6 +341,7 @@ modelpulse/
 ├── dashboard/                         # Next.js 14 dashboard ("SIGNAL" mission-control UI)
 │   ├── app/
 │   │   ├── page.tsx                   # / — overview + live feed
+│   │   ├── health/page.tsx           # /health — collector uptime + heal history
 │   │   ├── timeline/page.tsx          # /timeline
 │   │   ├── stats/page.tsx             # /stats — risk index, WoW verdict
 │   │   ├── vendor/[slug]/page.tsx     # /vendor/openai, etc.
@@ -344,18 +363,27 @@ modelpulse/
 ├── ci/
 │   └── check-breaking.mjs             # CI gate: fail builds on breaking changes
 ├── scripts/
-│   ├── create-collectors.sh           # creates all 20 c_* IDs
+│   ├── create-collectors.sh           # creates all 10 c_* IDs
 │   ├── setup.sh                       # one-command bootstrap
 │   ├── demo-heal.sh                   # the self-healing demo
 │   ├── seed-data.sh                   # populate fake data
 │   └── seed.ts                        # the seed script
 ├── .github/workflows/
 │   └── daily-scrape.yml               # cron: 09:00 UTC daily
+├── src/tests/                         # unit tests (Vitest)
+│   ├── normalize.test.ts
+│   ├── impact.test.ts
+│   ├── diff.test.ts
+│   ├── alert.test.ts
+│   ├── heal.test.ts                   # partial-breakage detection
+│   ├── db.test.ts                     # upsert + mutation diffing
+│   └── brightdata.test.ts             # dataset unwrapping
 ├── docs/
 │   ├── architecture.md
 │   ├── self-healing.md                # the demo transcript
+│   ├── live-heal-log.md               # real heal transcript (actual API calls)
 │   ├── why-modelpulse.md
-│   └── screenshot-dashboard.png       # ← ADD THIS (screenshot your dashboard)
+│   └── screenshot-dashboard.png
 ├── examples/
 │   ├── openai-sample.json
 │   ├── anthropic-sample.json
@@ -390,4 +418,4 @@ MIT — see [LICENSE](./LICENSE).
 
 - [Bright Data](https://brightdata.com) for Scraper Studio and the `bdata` CLI
 - [WeMakeDevs](https://www.wemakedevs.org) for hosting the Scrape-Verse Hackathon
-- The 20 AI vendors whose public changelogs make this project possible
+- The 10 AI vendors whose public changelogs make this project possible

@@ -8,6 +8,7 @@ export const NAV = [
   { n: "01", label: "OVERVIEW", href: "/" },
   { n: "02", label: "TIMELINE", href: "/timeline" },
   { n: "03", label: "ANALYTICS", href: "/stats" },
+  { n: "04", label: "HEALTH", href: "/health" },
 ];
 
 export function PulseMark() {
@@ -88,7 +89,7 @@ export function Sidebar() {
           <span className="font-mono text-[10px] tracking-[0.2em] text-ink-dim">RADAR ACTIVE</span>
         </div>
         <a
-          href="https://github.com/yourusername/modelpulse"
+          href="https://github.com/rajkumarpawar07/modelpulse"
           target="_blank"
           rel="noreferrer"
           className="mt-3 block font-mono text-[10px] tracking-[0.16em] text-ink-faint transition-colors hover:text-signal"

@@ -18,10 +18,13 @@ out/
 !.env.example
 
 # Database & data
-data/*.db
+# The committed data/modelpulse.db IS the persistence layer: the daily
+# workflow commits it back so history accumulates and the deployed
+# dashboard always has fresh data. Only the SQLite side-files are ignored.
 data/*.db-journal
 data/*.db-wal
 data/*.db-shm
+data/*-test.db
 raw/
 !raw/.gitkeep
 

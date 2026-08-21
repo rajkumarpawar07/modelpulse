@@ -88,6 +88,20 @@ export function getDb(dbPath: string = process.env.DATABASE_PATH || './data/mode
       keyword    TEXT NOT NULL UNIQUE,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS heals (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      vendor          TEXT NOT NULL,
+      collector_id    TEXT NOT NULL,
+      trigger_reason  TEXT NOT NULL,
+      status          TEXT NOT NULL DEFAULT 'pending',
+      interaction_id  TEXT,
+      started_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      finished_at     TEXT,
+      error           TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_heals_vendor ON heals(vendor);
+    CREATE INDEX IF NOT EXISTS idx_heals_started ON heals(started_at);
   `);
 
   ensureColumn(db, 'changes', 'impact', 'INTEGER NOT NULL DEFAULT 0');
@@ -242,19 +256,15 @@ export function finishRun(db: Database.Database, runId: number, status: Run['sta
   `).run(status, rows, error, runId);
 }
 
-/** Get changes since a given date (inclusive). */
-export function getChangesSince(db: Database.Database, sinceDate: string): Change[] {
-  const rows = db.prepare(`
-    SELECT id, vendor, vendor_display, title, version, date, change_type, description, url, is_breaking, raw
-    FROM changes
-    WHERE date >= ?
-    ORDER BY date DESC, vendor ASC
-  `).all(sinceDate) as Array<{
-    id: string; vendor: string; vendor_display: string; title: string;
-    version: string | null; date: string; change_type: string; description: string;
-    url: string; is_breaking: number; raw: string;
-  }>;
-  return rows.map(r => ({
+/** Map a raw DB row to a Change (shared by all query helpers). */
+type ChangeRow = {
+  id: string; vendor: string; vendor_display: string; title: string;
+  version: string | null; date: string; change_type: string; description: string;
+  url: string; is_breaking: number; raw: string;
+};
+
+function mapRow(r: ChangeRow): Change {
+  return {
     id: r.id,
     vendor: r.vendor,
     vendor_display: r.vendor_display,
@@ -266,89 +276,54 @@ export function getChangesSince(db: Database.Database, sinceDate: string): Chang
     url: r.url,
     is_breaking: r.is_breaking === 1,
     raw: r.raw ? JSON.parse(r.raw) : null,
-  }));
+  };
+}
+
+const CHANGE_COLS = 'id, vendor, vendor_display, title, version, date, change_type, description, url, is_breaking, raw';
+
+/** Get changes since a given date (inclusive). */
+export function getChangesSince(db: Database.Database, sinceDate: string): Change[] {
+  const rows = db.prepare(`
+    SELECT ${CHANGE_COLS}
+    FROM changes
+    WHERE date >= ?
+    ORDER BY date DESC, vendor ASC
+  `).all(sinceDate) as ChangeRow[];
+  return rows.map(mapRow);
 }
 
 /** Get changes between two dates (inclusive both). */
 export function getChangesBetween(db: Database.Database, startDate: string, endDate: string): Change[] {
   const rows = db.prepare(`
-    SELECT id, vendor, vendor_display, title, version, date, change_type, description, url, is_breaking, raw
+    SELECT ${CHANGE_COLS}
     FROM changes
     WHERE date BETWEEN ? AND ?
     ORDER BY date DESC, vendor ASC
-  `).all(startDate, endDate) as Array<{
-    id: string; vendor: string; vendor_display: string; title: string;
-    version: string | null; date: string; change_type: string; description: string;
-    url: string; is_breaking: number; raw: string;
-  }>;
-  return rows.map(r => ({
-    id: r.id,
-    vendor: r.vendor,
-    vendor_display: r.vendor_display,
-    title: r.title,
-    version: r.version,
-    date: r.date,
-    change_type: r.change_type as Change['change_type'],
-    description: r.description,
-    url: r.url,
-    is_breaking: r.is_breaking === 1,
-    raw: r.raw ? JSON.parse(r.raw) : null,
-  }));
+  `).all(startDate, endDate) as ChangeRow[];
+  return rows.map(mapRow);
 }
 
 /** Latest N changes across all vendors. */
 export function getLatestChanges(db: Database.Database, limit: number = 50): Change[] {
   const rows = db.prepare(`
-    SELECT id, vendor, vendor_display, title, version, date, change_type, description, url, is_breaking, raw
+    SELECT ${CHANGE_COLS}
     FROM changes
     ORDER BY date DESC, vendor ASC
     LIMIT ?
-  `).all(limit) as Array<{
-    id: string; vendor: string; vendor_display: string; title: string;
-    version: string | null; date: string; change_type: string; description: string;
-    url: string; is_breaking: number; raw: string;
-  }>;
-  return rows.map(r => ({
-    id: r.id,
-    vendor: r.vendor,
-    vendor_display: r.vendor_display,
-    title: r.title,
-    version: r.version,
-    date: r.date,
-    change_type: r.change_type as Change['change_type'],
-    description: r.description,
-    url: r.url,
-    is_breaking: r.is_breaking === 1,
-    raw: r.raw ? JSON.parse(r.raw) : null,
-  }));
+  `).all(limit) as ChangeRow[];
+  return rows.map(mapRow);
 }
 
 /** Get changes for one vendor. */
 export function getChangesForVendor(db: Database.Database, vendor: string, limit: number = 200): Change[] {
   const rows = db.prepare(`
-    SELECT id, vendor, vendor_display, title, version, date, change_type, description, url, is_breaking, raw
+    SELECT ${CHANGE_COLS}
     FROM changes
     WHERE vendor = ?
     ORDER BY date DESC
     LIMIT ?
-  `).all(vendor, limit) as Array<{
-    id: string; vendor: string; vendor_display: string; title: string;
-    version: string | null; date: string; change_type: string; description: string;
-    url: string; is_breaking: number; raw: string;
-  }>;
-  return rows.map(r => ({
-    id: r.id,
-    vendor: r.vendor,
-    vendor_display: r.vendor_display,
-    title: r.title,
-    version: r.version,
-    date: r.date,
-    change_type: r.change_type as Change['change_type'],
-    description: r.description,
-    url: r.url,
-    is_breaking: r.is_breaking === 1,
-    raw: r.raw ? JSON.parse(r.raw) : null,
-  }));
+  `).all(vendor, limit) as ChangeRow[];
+  return rows.map(mapRow);
 }
 
 /** Stats for the /stats page. */
@@ -368,8 +343,11 @@ export function getStats(db: Database.Database): {
   const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const twoWeeksAgo = new Date(today.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const thisWeek = (db.prepare(`SELECT COUNT(*) AS c FROM changes WHERE date >= ?`).get(weekAgo) as { c: number }).c;
-  const lastWeek = (db.prepare(`SELECT COUNT(*) AS c FROM changes WHERE date >= ? AND date < ?`).get(twoWeeksAgo, weekAgo) as { c: number }).c;
+  // Week-over-week uses first_seen_at (when we captured the row), not the
+  // vendor-published `date` — re-scraped old entries whose dates were parsed
+  // differently would otherwise skew the comparison.
+  const thisWeek = (db.prepare(`SELECT COUNT(*) AS c FROM changes WHERE first_seen_at >= ?`).get(weekAgo) as { c: number }).c;
+  const lastWeek = (db.prepare(`SELECT COUNT(*) AS c FROM changes WHERE first_seen_at >= ? AND first_seen_at < ?`).get(twoWeeksAgo, weekAgo) as { c: number }).c;
 
   const byVendor = db.prepare(`
     SELECT vendor, vendor_display,
@@ -388,6 +366,112 @@ export function getStats(db: Database.Database): {
     this_week_count: thisWeek,
     last_week_count: lastWeek,
   };
+}
+
+/* ── Auto-heal tracking ──────────────────────────────────────────── */
+
+export interface HealRecord {
+  id: number;
+  vendor: string;
+  collector_id: string;
+  trigger_reason: string;
+  status: string;
+  interaction_id: string | null;
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+}
+
+/** Record the start of a heal attempt. Returns the heal record id. */
+export function startHeal(
+  db: Database.Database,
+  vendor: string,
+  collectorId: string,
+  reason: string,
+): number {
+  const info = db.prepare(`
+    INSERT INTO heals (vendor, collector_id, trigger_reason, status)
+    VALUES (?, ?, ?, 'pending')
+  `).run(vendor, collectorId, reason);
+  return Number(info.lastInsertRowid);
+}
+
+/** Update a heal record with outcome. */
+export function finishHeal(
+  db: Database.Database,
+  healId: number,
+  status: 'healed' | 'failed' | 'approved',
+  interactionId: string | null = null,
+  error: string | null = null,
+): void {
+  db.prepare(`
+    UPDATE heals SET finished_at = CURRENT_TIMESTAMP, status = ?, interaction_id = ?, error = ?
+    WHERE id = ?
+  `).run(status, interactionId, error, healId);
+}
+
+/** Get recent heal records (for the health dashboard). */
+export function getHeals(db: Database.Database, limit: number = 50): HealRecord[] {
+  return db.prepare(`
+    SELECT id, vendor, collector_id, trigger_reason, status, interaction_id,
+           started_at, finished_at, error
+    FROM heals
+    ORDER BY started_at DESC
+    LIMIT ?
+  `).all(limit) as HealRecord[];
+}
+
+/** Per-collector health summary for the /health dashboard page. */
+export interface CollectorHealth {
+  vendor: string;
+  vendor_display: string;
+  collector_id: string;
+  last_run_status: string | null;
+  last_run_at: string | null;
+  last_success_at: string | null;
+  total_runs: number;
+  success_runs: number;
+  total_heals: number;
+  successful_heals: number;
+}
+
+export function getCollectorHealth(db: Database.Database): CollectorHealth[] {
+  return db.prepare(`
+    SELECT
+      r.vendor,
+      c_latest.vendor_display,
+      r.collector_id,
+      (SELECT status FROM runs WHERE vendor = r.vendor ORDER BY started_at DESC LIMIT 1) AS last_run_status,
+      (SELECT started_at FROM runs WHERE vendor = r.vendor ORDER BY started_at DESC LIMIT 1) AS last_run_at,
+      (SELECT started_at FROM runs WHERE vendor = r.vendor AND status = 'success' ORDER BY started_at DESC LIMIT 1) AS last_success_at,
+      COUNT(*) AS total_runs,
+      SUM(CASE WHEN r.status = 'success' THEN 1 ELSE 0 END) AS success_runs,
+      COALESCE((SELECT COUNT(*) FROM heals WHERE vendor = r.vendor), 0) AS total_heals,
+      COALESCE((SELECT COUNT(*) FROM heals WHERE vendor = r.vendor AND status IN ('healed', 'approved')), 0) AS successful_heals
+    FROM runs r
+    LEFT JOIN (
+      SELECT vendor, vendor_display FROM changes GROUP BY vendor
+    ) c_latest ON c_latest.vendor = r.vendor
+    GROUP BY r.vendor
+    ORDER BY r.vendor ASC
+  `).all() as CollectorHealth[];
+}
+
+/**
+ * How many of the most recent runs for a vendor failed consecutively.
+ * Used to stop the auto-heal loop from burning credits on a vendor whose
+ * site is down or permanently blocked.
+ */
+export function getConsecutiveFailures(db: Database.Database, vendor: string): number {
+  const rows = db.prepare(`
+    SELECT status FROM runs WHERE vendor = ? ORDER BY id DESC LIMIT 10
+  `).all(vendor) as Array<{ status: string }>;
+  let n = 0;
+  for (const r of rows) {
+    if (r.status === 'success') break;
+    n += 1;
+  }
+  return n;
 }
 
 /** Close the database. (Called on process exit.) */

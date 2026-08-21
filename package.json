@@ -9,7 +9,6 @@
   },
   "scripts": {
     "scrape": "tsx src/cli.ts scrape",
-    "normalize": "tsx src/cli.ts normalize",
     "diff": "tsx src/cli.ts diff",
     "alert": "tsx src/cli.ts alert",
     "all": "tsx src/cli.ts all",
@@ -17,6 +16,8 @@
     "demo:heal": "bash scripts/demo-heal.sh",
     "seed": "bash scripts/seed-data.sh",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --write \"src/**/*.ts\""
   },
   "dependencies": {
@@ -29,6 +30,7 @@
     "@types/node": "^22.5.0",
     "prettier": "^3.3.3",
     "tsx": "^4.19.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.11"
   }
 }

@@ -5,7 +5,9 @@
  * scraper can run independently. They share the same .db file.
  */
 import Database from "better-sqlite3";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Change } from "../../src/types.js";
 
 const DB_PATH = process.env.DATABASE_PATH || join(process.cwd(), "..", "data", "modelpulse.db");
@@ -85,6 +87,113 @@ export interface WatchRow {
 export function getWatches(): WatchRow[] {
   try {
     return db().prepare(`SELECT id, keyword FROM watches ORDER BY id ASC`).all() as WatchRow[];
+  } catch {
+    return [];
+  }
+}
+
+/* ── Collector health + heal history (for /health) ────────────────── */
+
+export interface CollectorHealthRow {
+  vendor: string;
+  vendor_display: string;
+  collector_id: string;
+  last_run_status: string | null;
+  last_run_at: string | null;
+  last_success_at: string | null;
+  total_runs: number;
+  success_runs: number;
+  total_heals: number;
+  successful_heals: number;
+}
+
+export interface HealRow {
+  id: number;
+  vendor: string;
+  collector_id: string;
+  trigger_reason: string;
+  status: string;
+  interaction_id: string | null;
+  started_at: string;
+  finished_at: string | null;
+  error: string | null;
+}
+
+/**
+ * Per-vendor health summary. Built from the collectors in collectors.json
+ * joined against run/heal history, so vendors that never ran still show up
+ * as UNKNOWN rather than silently missing.
+ */
+export function getCollectorHealth(): CollectorHealthRow[] {
+  const d = db();
+
+  let declared: Array<{ vendor: string; vendor_display: string; collector_id: string; enabled: boolean }> = [];
+  try {
+    // ../../collectors.json relative to this file, regardless of cwd.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const raw = JSON.parse(readFileSync(join(here, "..", "..", "..", "collectors.json"), "utf-8"));
+    declared = raw.collectors;
+  } catch {
+    declared = [];
+  }
+
+  const runStats = d.prepare(`
+    SELECT vendor,
+           COUNT(*) AS total_runs,
+           SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success_runs,
+           (SELECT status FROM runs r2 WHERE r2.vendor = r1.vendor ORDER BY id DESC LIMIT 1) AS last_run_status,
+           (SELECT started_at FROM runs r2 WHERE r2.vendor = r1.vendor ORDER BY id DESC LIMIT 1) AS last_run_at,
+           (SELECT started_at FROM runs r2 WHERE r2.vendor = r1.vendor AND status = 'success' ORDER BY id DESC LIMIT 1) AS last_success_at
+    FROM runs r1
+    GROUP BY vendor
+  `).all() as any[];
+
+  const healStats = d.prepare(`
+    SELECT vendor,
+           COUNT(*) AS total_heals,
+           SUM(CASE WHEN status IN ('healed', 'approved') THEN 1 ELSE 0 END) AS successful_heals
+    FROM heals
+    GROUP BY vendor
+  `).all() as any[];
+
+  const runBy = new Map(runStats.map((r: any) => [r.vendor, r]));
+  const healBy = new Map(healStats.map((h: any) => [h.vendor, h]));
+
+  const rows: CollectorHealthRow[] = (declared.length
+    ? declared.map((c: any) => ({
+        vendor: c.vendor,
+        vendor_display: c.vendor_display,
+        collector_id: c.collector_id,
+      }))
+    : (d.prepare(`SELECT DISTINCT vendor, vendor_display, collector_id FROM runs ORDER BY vendor`).all() as any[])
+  ).map((c: any) => {
+    const r = runBy.get(c.vendor) || {} as any;
+    const h = healBy.get(c.vendor) || {} as any;
+    return {
+      vendor: c.vendor,
+      vendor_display: c.vendor_display,
+      collector_id: c.collector_id,
+      last_run_status: r.last_run_status ?? null,
+      last_run_at: r.last_run_at ?? null,
+      last_success_at: r.last_success_at ?? null,
+      total_runs: r.total_runs ?? 0,
+      success_runs: r.success_runs ?? 0,
+      successful_heals: h.successful_heals ?? 0,
+      total_heals: h.total_heals ?? 0,
+    };
+  });
+
+  return rows;
+}
+
+export function getHeals(limit = 25): HealRow[] {
+  try {
+    return db()
+      .prepare(
+        `SELECT id, vendor, collector_id, trigger_reason, status, interaction_id, started_at, finished_at, error
+         FROM heals ORDER BY started_at DESC LIMIT ?`
+      )
+      .all(limit) as HealRow[];
   } catch {
     return [];
   }

@@ -23,16 +23,85 @@ import {
   addWatch,
   removeWatch,
   listWatches,
+  startHeal,
+  finishHeal,
+  getConsecutiveFailures,
 } from './db.js';
-import { runCollector, loadCollectors } from './brightdata.js';
-import { normalizeDataset } from './normalize.js';
+import {
+  runCollector,
+  loadCollectors,
+  healCollector,
+  approveHeal,
+  waitForHealReady,
+} from './brightdata.js';
+import { normalizeDataset, detectPartialFailure } from './normalize.js';
 import { computeDiff, printDiff } from './diff.js';
 import { buildAlert, dispatchAlert, matchWatch } from './alert.js';
 import { fetchGithubReleases } from './sources/github.js';
-import type { Change } from './types.js';
+import type { Change, Collector } from './types.js';
 
 const args = process.argv.slice(2);
 const command = args[0] || 'all';
+
+/** Collectors that failed, returned 0 rows, or show partial breakage → auto-heal. */
+interface FailedCollector {
+  collector: Collector;
+  reason: string;
+}
+
+/** Result of one collector scrape, gathered concurrently. */
+interface ScrapeResult {
+  collector: Collector;
+  ok: boolean;
+  rows: number;
+  inserted: number;
+  updated: number;
+  changes: Change[];
+  error?: string;
+  partialReason?: string;
+}
+
+/** Scrape one collector: run, normalize, upsert, and detect partial breakage. */
+async function scrapeOne(collector: Collector): Promise<ScrapeResult> {
+  const db = getDb();
+  const runId = startRun(db, collector.vendor, collector.collector_id);
+  try {
+    const dataset = await runCollector(collector, {
+      timeoutMs: parseInt(process.env.SCRAPE_TIMEOUT_MS || '300000', 10),
+    });
+    const partialReason = detectPartialFailure(dataset);
+    const changes = normalizeDataset(dataset, collector);
+    const res = upsertChanges(db, changes);
+    finishRun(db, runId, 'success', changes.length);
+    return {
+      collector,
+      ok: true,
+      rows: changes.length,
+      inserted: res.inserted,
+      updated: res.updated,
+      changes,
+      partialReason: partialReason ?? undefined,
+    };
+  } catch (err) {
+    const msg = (err as Error).message;
+    finishRun(db, runId, 'failed', 0, msg);
+    return { collector, ok: false, rows: 0, inserted: 0, updated: 0, changes: [], error: msg };
+  }
+}
+
+/** Run async work with a bounded concurrency limit. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 
 async function cmdScrape(): Promise<void> {
   const db = getDb();
@@ -42,29 +111,41 @@ async function cmdScrape(): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`\n🕷️  Scraping ${collectors.length} collector(s)...\n`);
+  const concurrency = Math.max(1, parseInt(process.env.SCRAPE_CONCURRENCY || '4', 10));
+  console.log(`\n🕷️  Scraping ${collectors.length} collector(s), ${concurrency} at a time...\n`);
+
+  const results = await mapLimit(collectors, concurrency, scrapeOne);
+
   let totalChanges = 0;
   let totalFailures = 0;
   const allChanges: Change[] = [];
+  const failedCollectors: FailedCollector[] = [];
 
-  for (const collector of collectors) {
-    process.stdout.write(`  ▶ ${collector.vendor_display.padEnd(20)} (${collector.collector_id}) ... `);
-    const runId = startRun(db, collector.vendor, collector.collector_id);
+  for (const r of results) {
+    if (r.ok) {
+      console.log(`  ✅ ${r.collector.vendor_display.padEnd(20)} — ${r.rows} rows (${r.inserted} new, ${r.updated} mutated)`);
+      totalChanges += r.rows;
+      allChanges.push(...r.changes);
 
-    try {
-      const dataset = await runCollector(collector, {
-        timeoutMs: parseInt(process.env.SCRAPE_TIMEOUT_MS || '300000', 10),
-      });
-      const changes = normalizeDataset(dataset, collector);
-      const res = upsertChanges(db, changes);
-      finishRun(db, runId, 'success', changes.length);
-      console.log(`✅ ${changes.length} rows (${res.inserted} new, ${res.updated} mutated)`);
-      totalChanges += changes.length;
-      allChanges.push(...changes);
-    } catch (err) {
-      finishRun(db, runId, 'failed', 0, (err as Error).message);
-      console.log(`❌ ${(err as Error).message.slice(0, 80)}`);
+      if (r.rows === 0) {
+        failedCollectors.push({
+          collector: r.collector,
+          reason: 'Scraper returned 0 rows — the site layout may have changed.',
+        });
+      } else if (r.partialReason) {
+        // Rows came back, but the fields we depend on are gone → partial breakage.
+        failedCollectors.push({
+          collector: r.collector,
+          reason: `Partial breakage: ${r.partialReason}. The page likely changed under the scraper.`,
+        });
+      }
+    } else {
+      console.log(`  ❌ ${r.collector.vendor_display.padEnd(20)} — ${r.error!.slice(0, 80)}`);
       totalFailures += 1;
+      failedCollectors.push({
+        collector: r.collector,
+        reason: `Scrape error: ${r.error!.slice(0, 200)}`,
+      });
     }
   }
 
@@ -91,14 +172,88 @@ async function cmdScrape(): Promise<void> {
     }
   }
 
-  console.log(`\n📊 Scrape complete: ${totalChanges}+ total rows, ${totalFailures} failure(s).\n`);
-  if (totalFailures > 0) {
-    console.log(`  ⚠️  ${totalFailures} collector(s) failed. Run \`npm run scrape:debug\` or check raw/*.json`);
-  }
-}
+  console.log(`\n📊 Scrape complete: ${totalChanges}+ total rows, ${totalFailures} failure(s).`);
 
-async function cmdNormalize(): Promise<void> {
-  console.log('\n🔄 Normalization happens automatically during scrape. Run `npm run scrape` instead.\n');
+  // ── Auto-heal: detect → heal → approve → re-run ────────────────────
+  const autoHeal = process.env.AUTO_HEAL !== 'false';
+  const healCooldown = Math.max(1, parseInt(process.env.HEAL_MAX_CONSECUTIVE_FAILURES || '3', 10));
+  if (autoHeal && failedCollectors.length > 0) {
+    console.log(`\n🩺 Auto-heal: ${failedCollectors.length} collector(s) need attention...\n`);
+
+    for (const { collector, reason } of failedCollectors) {
+      // Circuit breaker: if this vendor has failed many times in a row,
+      // healing is probably not going to help (site down, blocked, gone).
+      // Skip and surface it loudly instead of burning credits daily.
+      const consecutive = getConsecutiveFailures(db, collector.vendor);
+      if (consecutive >= healCooldown) {
+        console.log(
+          `  ⛔ ${collector.vendor_display.padEnd(16)} skipped — ${consecutive} consecutive failures. ` +
+          `Heal circuit breaker open; investigate manually or reset with a successful run.`
+        );
+        continue;
+      }
+
+      const healPrompt =
+        `The latest scrape of ${collector.vendor_display}'s changelog is broken or degraded. ` +
+        `The site layout may have changed. Re-inspect the page at ${collector.url} and fix the extraction ` +
+        `to return: title, date (YYYY-MM-DD), change_type (added/changed/deprecated/removed/fixed), ` +
+        `version, description, url for every entry. Reason: ${reason}`;
+
+      process.stdout.write(`  🔧 Healing ${collector.vendor_display.padEnd(16)} (${collector.collector_id}) ... `);
+      const healId = startHeal(db, collector.vendor, collector.collector_id, reason);
+
+      const interactionId = await healCollector(collector.collector_id, healPrompt);
+      if (!interactionId) {
+        finishHeal(db, healId, 'failed', null, 'Heal API returned null');
+        console.log('❌ heal request failed');
+        continue;
+      }
+
+      // Wait for the AI refactor to actually finish before approving,
+      // so we never approve a half-written template.
+      const healReady = await waitForHealReady(collector.collector_id);
+      if (!healReady) {
+        console.log('\n  ⚠️  heal did not report ready in time');
+      }
+
+      const approved = await approveHeal(collector.collector_id);
+      if (!approved) {
+        finishHeal(db, healId, 'healed', interactionId, 'Auto-approve failed');
+        console.log(`⚠️ healed but approve failed (${interactionId})`);
+        continue;
+      }
+      finishHeal(db, healId, 'approved', interactionId);
+      console.log(`✅ healed & approved (${interactionId})`);
+
+      // Re-run the healed collector — up to HEAL_RERUN_ATTEMPTS times.
+      const maxAttempts = Math.max(1, parseInt(process.env.HEAL_RERUN_ATTEMPTS || '2', 10));
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        process.stdout.write(`  🔄 Re-running ${collector.vendor_display.padEnd(16)} (attempt ${attempt}/${maxAttempts}) ... `);
+        const reRunId = startRun(db, collector.vendor, collector.collector_id);
+        try {
+          const dataset = await runCollector(collector, { timeoutMs: 180_000 });
+          const partialReason = detectPartialFailure(dataset);
+          const changes = normalizeDataset(dataset, collector);
+          const res = upsertChanges(db, changes);
+          finishRun(db, reRunId, 'success', changes.length);
+          console.log(`✅ ${changes.length} rows recovered (${res.inserted} new)`);
+          allChanges.push(...changes);
+          if (partialReason && changes.length > 0) {
+            console.log(`     ⚠️  still partially degraded: ${partialReason}`);
+          }
+          break;
+        } catch (err) {
+          finishRun(db, reRunId, 'failed', 0, (err as Error).message);
+          console.log(`❌ ${(err as Error).message.slice(0, 60)}`);
+        }
+      }
+    }
+    console.log();
+  } else if (failedCollectors.length > 0) {
+    console.log(`  ⚠️  ${failedCollectors.length} collector(s) failed. Set AUTO_HEAL=true to auto-fix.`);
+  }
+
+  console.log();
 }
 
 async function cmdDiff(): Promise<void> {
@@ -201,13 +356,12 @@ async function main(): Promise<void> {
   try {
     switch (command) {
       case 'scrape':    await cmdScrape(); break;
-      case 'normalize': await cmdNormalize(); break;
       case 'diff':      await cmdDiff(); break;
       case 'alert':     await cmdAlert(); break;
       case 'all':       await cmdAll(); break;
       case 'watch':     await cmdWatch(args.slice(1)); break;
       default:
-        console.error(`Unknown command: ${command}. Use: scrape | normalize | diff | alert | all | watch`);
+        console.error(`Unknown command: ${command}. Use: scrape | diff | alert | all | watch`);
         process.exit(1);
     }
   } catch (err) {

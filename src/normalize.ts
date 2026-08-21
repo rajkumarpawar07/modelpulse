@@ -157,6 +157,43 @@ export function normalizeRow(raw: unknown, collector: Collector): Change | null 
   };
 }
 
+/**
+ * Detect partial breakage: the scraper still returns rows, but the fields
+ * we depend on have gone missing — the classic post-redesign failure mode
+ * where the layout changed and extraction silently degrades.
+ *
+ * Returns a human-readable reason string, or null when the dataset looks
+ * healthy enough to trust.
+ */
+export function detectPartialFailure(dataset: unknown): string | null {
+  if (!Array.isArray(dataset) || dataset.length === 0) return null;
+
+  const REQUIRED_DATE_KEYS = ['date', 'published_at', 'created_at', 'timestamp'];
+  const REQUIRED_TYPE_KEYS = ['change_type', 'type', 'category', 'tag'];
+  const REQUIRED_TITLE_KEYS = ['title', 'headline', 'name', 'summary', 'description', 'body', 'details', 'content'];
+
+  let missingDate = 0;
+  let missingType = 0;
+  let missingTitle = 0;
+
+  for (const row of dataset) {
+    if (row == null || typeof row !== 'object') continue;
+    const obj = row as Record<string, unknown>;
+    const has = (keys: string[]) => keys.some(k => obj[k] != null && String(obj[k]).trim() !== '');
+    if (!has(REQUIRED_DATE_KEYS)) missingDate += 1;
+    if (!has(REQUIRED_TYPE_KEYS)) missingType += 1;
+    if (!has(REQUIRED_TITLE_KEYS)) missingTitle += 1;
+  }
+
+  const n = dataset.length;
+  const ratio = (x: number) => x / n;
+  // Any required field missing from a majority of rows means the page moved.
+  if (ratio(missingTitle) > 0.5) return `${missingTitle}/${n} rows are missing titles`;
+  if (ratio(missingDate) > 0.5) return `${missingDate}/${n} rows are missing dates`;
+  if (ratio(missingType) > 0.5) return `${missingType}/${n} rows are missing change_type`;
+  return null;
+}
+
 /** Normalize an entire dataset (JSON array) from a collector. */
 export function normalizeDataset(dataset: unknown, collector: Collector): Change[] {
   if (!Array.isArray(dataset)) {
