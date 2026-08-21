@@ -1,0 +1,172 @@
+/**
+ * normalize.ts — Vendor-agnostic schema.
+ *
+ * Every vendor's changelog page returns rows that look slightly different.
+ * This module flattens them into a single Change shape.
+ *
+ * The Bright Data AI Agent does most of the heavy lifting (the
+ * `bdata scraper create` prompt tells it what fields to extract). But
+ * vendors use different field names, and we still need to:
+ *   - normalize change_type strings to one of: added|changed|deprecated|removed|fixed
+ *   - flag deprecated/removed as breaking
+ *   - generate a stable id (sha256 of vendor + url)
+ *   - parse dates to YYYY-MM-DD
+ */
+import { createHash } from 'node:crypto';
+import type { Change, ChangeType, Collector } from './types.js';
+
+const KNOWN_CHANGE_TYPES: ChangeType[] = ['added', 'changed', 'deprecated', 'removed', 'fixed'];
+
+/** Map vendor-specific strings to our normalized ChangeType. */
+function normalizeChangeType(raw: unknown): ChangeType {
+  if (typeof raw !== 'string') return 'changed';
+  const s = raw.toLowerCase().trim();
+  if (KNOWN_CHANGE_TYPES.includes(s as ChangeType)) return s as ChangeType;
+
+  // Vendor-specific mappings
+  if (s === 'new' || s === 'feature' || s === 'launch' || s === 'release' || s === 'shipped') return 'added';
+  if (s === 'update' || s === 'improvement' || s === 'enhance' || s === 'modified') return 'changed';
+  if (s === 'deprecate' || s === 'sunset' || s === 'retire' || s === 'end-of-life' || s === 'eol') return 'deprecated';
+  if (s === 'delete' || s === 'drop' || s === 'kill') return 'removed';
+  if (s === 'bugfix' || s === 'patch' || s === 'hotfix') return 'fixed';
+
+  return 'changed';
+}
+
+/** Normalize a date to YYYY-MM-DD. Falls back to today's date if unparseable. */
+function normalizeDate(raw: unknown): string {
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  const s = raw.trim();
+
+  // ISO date (YYYY-MM-DD)
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return s.slice(0, 10);
+  }
+
+  // YYYY/MM/DD
+  if (/^\d{4}\/\d{2}\/\d{2}/.test(s)) {
+    return s.slice(0, 10).replace(/\//g, '-');
+  }
+
+  // Try Date.parse
+  const ms = Date.parse(s);
+  if (!isNaN(ms)) {
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+
+  // Fallback: today
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Coerce to string, fallback to empty string. */
+function asString(v: unknown, fallback: string = ''): string {
+  if (v == null) return fallback;
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (typeof v === 'object') {
+    // Try common field names
+    const obj = v as Record<string, unknown>;
+    return asString(obj.text || obj.value || obj.name || obj.content, fallback);
+  }
+  return fallback;
+}
+
+/** Coerce to string|null for optional fields. */
+function asStringOrNull(v: unknown): string | null {
+  const s = asString(v, '').trim();
+  return s === '' ? null : s;
+}
+
+function stableId(vendor: string, key: string): string {
+  return createHash('sha256').update(`${vendor}::${key}`).digest('hex').slice(0, 32);
+}
+
+/** Strip HTML tags and collapse whitespace. */
+function stripHtml(s: string): string {
+  return s
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Derive a title when the source has none: first sentence of the
+ * description, trimmed to a readable length.
+ */
+function deriveTitle(descriptionHtml: string, fallback: string): string {
+  const text = stripHtml(descriptionHtml);
+  if (!text) return fallback;
+  const sentence = text.split(/(?<=[.!?])\s/)[0] || text;
+  return sentence.length > 110 ? `${sentence.slice(0, 107)}…` : sentence;
+}
+
+/**
+ * Normalize a single raw row from a Scraper Studio collector into a Change.
+ *
+ * The Bright Data AI Agent returns rows with the field names we asked for
+ * in the create prompt. We just need to be defensive about types.
+ */
+export function normalizeRow(raw: unknown, collector: Collector): Change | null {
+  if (raw == null || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+
+  const rawDescription = asString(row.description || row.body || row.details || row.content);
+
+  // Required: title (derived from the description when the source has none)
+  let title = asString(row.title || row.headline || row.name || row.summary);
+  if (!title.trim()) title = deriveTitle(rawDescription, `${collector.vendor_display} update`);
+  if (!title.trim()) return null;
+
+  // URL is the dedup key (combined with vendor). Some sources omit it —
+  // synthesize a stable one from the entry content so ids stay stable.
+  let url = asString(row.url || row.link || row.href || '');
+  if (!url.trim()) {
+    url = `${collector.url}#e-${stableId(collector.vendor, `${title}|${asString(row.date || '')}`).slice(0, 12)}`;
+  }
+
+  const version = asStringOrNull(row.version || row.model || row.model_id || row.release);
+
+  const changeType = normalizeChangeType(row.change_type || row.type || row.category || row.tag);
+  const date = normalizeDate(row.date || row.published_at || row.created_at || row.timestamp);
+
+  const description = stripHtml(rawDescription);
+
+  const isBreaking = changeType === 'deprecated' || changeType === 'removed';
+
+  return {
+    id: stableId(collector.vendor, url),
+    vendor: collector.vendor,
+    vendor_display: collector.vendor_display,
+    title: stripHtml(title).trim(),
+    version,
+    date,
+    change_type: changeType,
+    description,
+    url: url.trim(),
+    is_breaking: isBreaking,
+    raw,
+  };
+}
+
+/** Normalize an entire dataset (JSON array) from a collector. */
+export function normalizeDataset(dataset: unknown, collector: Collector): Change[] {
+  if (!Array.isArray(dataset)) {
+    console.warn(`  ⚠️  ${collector.vendor}: dataset is not an array (${typeof dataset})`);
+    return [];
+  }
+  const out: Change[] = [];
+  for (const row of dataset) {
+    const c = normalizeRow(row, collector);
+    if (c) out.push(c);
+  }
+  return out;
+}

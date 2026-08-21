@@ -1,0 +1,7 @@
+{
+  "_note": "This is what ModelPulse would POST to a Slack incoming webhook. Use this as a sample in your README to show what an alert looks like in production.",
+  "_rendered_markdown": "🚨 *ModelPulse — 2 breaking change(s) this week*\n\n*OpenAI* (1 breaking):\n🚨 [2024-08-15] *deprecated* *(BREAKING)*: gpt-3.5-turbo-0613 and gpt-3.5-turbo-16k-0613 deprecation — `gpt-3.5-turbo-0613`\n   https://platform.openai.com/docs/deprecations#gpt-3.5-turbo-0613\n\n*Mistral AI* (1 breaking):\n🚨 [2024-09-12] *deprecated* *(BREAKING)*: mistral-7b-v0.3 deprecation notice — `mistral-7b-v0.3`\n   https://docs.mistral.ai/getting-started/changelog/#2024-09-12\n\n*Anthropic*:\n✨ [2024-10-22] *added*: Claude 3.5 Sonnet now supports prompt caching — `claude-3-5-sonnet-20241022`\n   https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching\n✨ [2024-10-22] *added*: Computer Use beta now available in the API — `claude-3-5-sonnet-20241022`\n   https://docs.anthropic.com/en/docs/agents-and-tools/computer-use\n\n_Caught early by ModelPulse. Open the dashboard for the full timeline: https://modelpulse.vercel.app_",
+  "_webhook_payload": {
+    "text": "🚨 *ModelPulse — 2 breaking change(s) this week*\n\n*OpenAI* (1 breaking):\n🚨 [2024-08-15] *deprecated* *(BREAKING)*: gpt-3.5-turbo-0613 and gpt-3.5-turbo-16k-0613 deprecation — `gpt-3.5-turbo-0613`\n   https://platform.openai.com/docs/deprecations#gpt-3.5-turbo-0613\n\n..."
+  }
+}

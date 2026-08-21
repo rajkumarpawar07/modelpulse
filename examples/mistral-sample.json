@@ -1,0 +1,42 @@
+[
+  {
+    "id": "f50617281920314253647586abcdef",
+    "vendor": "mistral",
+    "vendor_display": "Mistral AI",
+    "title": "mistral-large-2407 general availability",
+    "version": "mistral-large-2407",
+    "date": "2024-07-24",
+    "change_type": "added",
+    "description": "mistral-large-2407 is now generally available via la Plateforme. The model features 123B parameters, a 128K context window, and improved reasoning capabilities.",
+    "url": "https://docs.mistral.ai/getting-started/changelog/#2024-07-24",
+    "is_breaking": false,
+    "raw": {
+      "title": "mistral-large-2407 general availability",
+      "version": "mistral-large-2407",
+      "date": "2024-07-24",
+      "change_type": "added",
+      "description": "mistral-large-2407 is now generally available via la Plateforme. The model features 123B parameters, a 128K context window, and improved reasoning capabilities.",
+      "url": "https://docs.mistral.ai/getting-started/changelog/#2024-07-24"
+    }
+  },
+  {
+    "id": "0617281920314253647586abcdef0",
+    "vendor": "mistral",
+    "vendor_display": "Mistral AI",
+    "title": "mistral-7b-v0.3 deprecation notice",
+    "version": "mistral-7b-v0.3",
+    "date": "2024-09-12",
+    "change_type": "deprecated",
+    "description": "mistral-7b-v0.3 will be retired on November 1, 2024. We recommend migrating to mistral-7b-v0.3-2407 or mistral-small-2407.",
+    "url": "https://docs.mistral.ai/getting-started/changelog/#2024-09-12",
+    "is_breaking": true,
+    "raw": {
+      "title": "mistral-7b-v0.3 deprecation notice",
+      "version": "mistral-7b-v0.3",
+      "date": "2024-09-12",
+      "change_type": "deprecated",
+      "description": "mistral-7b-v0.3 will be retired on November 1, 2024. We recommend migrating to mistral-7b-v0.3-2407 or mistral-small-2407.",
+      "url": "https://docs.mistral.ai/getting-started/changelog/#2024-09-12"
+    }
+  }
+]

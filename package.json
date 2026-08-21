@@ -1,0 +1,34 @@
+{
+  "name": "modelpulse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI API Change Intelligence — self-healing changelog radar for AI builders. Built for the Scrape-Verse Hackathon with Bright Data Scraper Studio.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "scrape": "tsx src/cli.ts scrape",
+    "normalize": "tsx src/cli.ts normalize",
+    "diff": "tsx src/cli.ts diff",
+    "alert": "tsx src/cli.ts alert",
+    "all": "tsx src/cli.ts all",
+    "watch": "tsx src/cli.ts watch",
+    "demo:heal": "bash scripts/demo-heal.sh",
+    "seed": "bash scripts/seed-data.sh",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "undici": "^6.19.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.5.0",
+    "prettier": "^3.3.3",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}

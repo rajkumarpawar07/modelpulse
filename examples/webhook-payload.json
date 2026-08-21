@@ -1,0 +1,32 @@
+{
+  "event": "modelpulse.alert",
+  "triggered_at": "2026-08-21T09:00:12.481Z",
+  "is_breaking": true,
+  "count": 3,
+  "window_days": 7,
+  "vendors": ["OpenAI", "Anthropic"],
+  "changes": [
+    {
+      "vendor": "openai",
+      "vendor_display": "OpenAI",
+      "title": "Deprecating gpt-4-32k in favor of newer checkpoints",
+      "version": "gpt-4-32k",
+      "date": "2026-08-19",
+      "change_type": "deprecated",
+      "is_breaking": true,
+      "impact": 88,
+      "url": "https://platform.openai.com/docs/deprecations"
+    },
+    {
+      "vendor": "anthropic",
+      "vendor_display": "Anthropic",
+      "title": "Rate limits adjusted for Claude Sonnet tier",
+      "version": null,
+      "date": "2026-08-18",
+      "change_type": "changed",
+      "is_breaking": false,
+      "impact": 52,
+      "url": "https://docs.anthropic.com/en/docs/changes"
+    }
+  ]
+}

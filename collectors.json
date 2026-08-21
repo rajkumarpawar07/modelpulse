@@ -1,0 +1,96 @@
+{
+  "_comment": "Placeholder. Run scripts/create-collectors.sh to populate this with 20 real c_* IDs. The c_* IDs are stable — once created, never re-create them. If you want to add a new vendor, just add a new entry here and run bdata scraper create for that URL.",
+  "_schema": "Each collector entry has: vendor (kebab slug), vendor_display (UI label), vendor_homepage, collector_id (the c_* string), url (changelog URL), tier (1=must-have, 2=recommended, 3=stretch), enabled (boolean).",
+  "collectors": [
+    {
+      "vendor": "openai",
+      "vendor_display": "OpenAI",
+      "vendor_homepage": "https://openai.com",
+      "collector_id": "c_mt35uk633yulmy4ui",
+      "url": "https://platform.openai.com/docs/changelog",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "vendor": "anthropic",
+      "vendor_display": "Anthropic",
+      "vendor_homepage": "https://anthropic.com",
+      "collector_id": "c_mt35zpsefr1p4nqoc",
+      "url": "https://docs.anthropic.com/en/release-notes/overview",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "vendor": "google_gemini",
+      "vendor_display": "Google Gemini",
+      "vendor_homepage": "https://ai.google.dev",
+      "collector_id": "c_mt35zsd71ze3waavgs",
+      "url": "https://ai.google.dev/gemini-api/docs/changelog",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "vendor": "mistral",
+      "vendor_display": "Mistral AI",
+      "vendor_homepage": "https://mistral.ai",
+      "collector_id": "c_mt3638oncytrsltmo",
+      "url": "https://docs.mistral.ai/getting-started/changelog/",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "vendor": "cohere",
+      "vendor_display": "Cohere",
+      "vendor_homepage": "https://cohere.com",
+      "collector_id": "c_mt363bal1b9dhuyepi",
+      "url": "https://docs.cohere.com/changelog",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "vendor": "groq",
+      "vendor_display": "Groq",
+      "vendor_homepage": "https://groq.com",
+      "collector_id": "c_mt3650mfpr5c1whel",
+      "url": "https://console.groq.com/docs/release-notes",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "vendor": "together",
+      "vendor_display": "Together AI",
+      "vendor_homepage": "https://together.ai",
+      "collector_id": "c_mt368cf12ipy4obcnm",
+      "url": "https://docs.together.ai/docs/release-notes",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "vendor": "replicate",
+      "vendor_display": "Replicate",
+      "vendor_homepage": "https://replicate.com",
+      "collector_id": "c_mt36a1uldo8r1e2zo",
+      "url": "https://replicate.com/changelog",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "vendor": "fireworks",
+      "vendor_display": "Fireworks AI",
+      "vendor_homepage": "https://fireworks.ai",
+      "collector_id": "c_mt36bqzoxmjmuuk6y",
+      "url": "https://docs.fireworks.ai/changelog",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "vendor": "huggingface",
+      "vendor_display": "Hugging Face",
+      "vendor_homepage": "https://huggingface.co",
+      "collector_id": "c_mt36dh0eeriviett5",
+      "url": "https://huggingface.co/docs/api-inference/en/package_reference/changelog",
+      "tier": 1,
+      "enabled": true
+    }
+  ]
+}

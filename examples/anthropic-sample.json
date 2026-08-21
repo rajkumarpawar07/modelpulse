@@ -1,0 +1,42 @@
+[
+  {
+    "id": "d3e4f50617281920314253647586abc",
+    "vendor": "anthropic",
+    "vendor_display": "Anthropic",
+    "title": "Claude 3.5 Sonnet now supports prompt caching",
+    "version": "claude-3-5-sonnet-20241022",
+    "date": "2024-10-22",
+    "change_type": "added",
+    "description": "Prompt caching is now generally available on Claude 3.5 Sonnet and Haiku. You can cache up to 4 breakpoints per prompt, reducing costs by up to 90% and latency by up to 85% for long prompts.",
+    "url": "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching",
+    "is_breaking": false,
+    "raw": {
+      "title": "Claude 3.5 Sonnet now supports prompt caching",
+      "version": "claude-3-5-sonnet-20241022",
+      "date": "2024-10-22",
+      "change_type": "added",
+      "description": "Prompt caching is now generally available on Claude 3.5 Sonnet and Haiku. You can cache up to 4 breakpoints per prompt, reducing costs by up to 90% and latency by up to 85% for long prompts.",
+      "url": "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching"
+    }
+  },
+  {
+    "id": "e4f50617281920314253647586abcd",
+    "vendor": "anthropic",
+    "vendor_display": "Anthropic",
+    "title": "Computer Use beta now available in the API",
+    "version": "claude-3-5-sonnet-20241022",
+    "date": "2024-10-22",
+    "change_type": "added",
+    "description": "We've launched Computer Use in public beta. Developers can now direct Claude to interact with computer interfaces by capturing screenshots and issuing mouse/keyboard actions.",
+    "url": "https://docs.anthropic.com/en/docs/agents-and-tools/computer-use",
+    "is_breaking": false,
+    "raw": {
+      "title": "Computer Use beta now available in the API",
+      "version": "claude-3-5-sonnet-20241022",
+      "date": "2024-10-22",
+      "change_type": "added",
+      "description": "We've launched Computer Use in public beta. Developers can now direct Claude to interact with computer interfaces by capturing screenshots and issuing mouse/keyboard actions.",
+      "url": "https://docs.anthropic.com/en/docs/agents-and-tools/computer-use"
+    }
+  }
+]

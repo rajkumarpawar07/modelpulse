@@ -1,0 +1,66 @@
+{
+  "_note": "Sample output of `npm run diff` for a hypothetical 7-day window. This is the JSON your Slack/Discord alert formatter consumes.",
+  "window_start": "2026-08-14",
+  "window_end": "2026-08-21",
+  "vendors": [
+    {
+      "vendor": "openai",
+      "vendor_display": "OpenAI",
+      "new_changes": [
+        {
+          "id": "a3f9b2e1c4d5e6f7081920a3b4c5d6e7",
+          "vendor": "openai",
+          "vendor_display": "OpenAI",
+          "title": "gpt-3.5-turbo-0613 retirement",
+          "version": "gpt-3.5-turbo-0613",
+          "date": "2026-08-15",
+          "change_type": "removed",
+          "description": "gpt-3.5-turbo-0613 has been retired from the API. Use gpt-3.5-turbo-0125 or gpt-4o-mini instead.",
+          "url": "https://platform.openai.com/docs/deprecations",
+          "is_breaking": true
+        }
+      ]
+    },
+    {
+      "vendor": "anthropic",
+      "vendor_display": "Anthropic",
+      "new_changes": [
+        {
+          "id": "e4f50617281920314253647586abcd",
+          "vendor": "anthropic",
+          "vendor_display": "Anthropic",
+          "title": "Claude 4.5 Sonnet available in public beta",
+          "version": "claude-4-5-sonnet",
+          "date": "2026-08-18",
+          "change_type": "added",
+          "description": "Claude 4.5 Sonnet is now in public beta. Improved coding, reasoning, and tool use over Claude 4 Sonnet.",
+          "url": "https://docs.anthropic.com/en/release-notes/overview",
+          "is_breaking": false
+        }
+      ]
+    },
+    {
+      "vendor": "mistral",
+      "vendor_display": "Mistral AI",
+      "new_changes": []
+    },
+    {
+      "vendor": "google_gemini",
+      "vendor_display": "Google Gemini",
+      "new_changes": [
+        {
+          "id": "9a8b7c6d5e4f3021122334455667788",
+          "vendor": "google_gemini",
+          "vendor_display": "Google Gemini",
+          "title": "Gemini 2.0 Pro context window expanded to 4M tokens",
+          "version": "gemini-2.0-pro",
+          "date": "2026-08-19",
+          "change_type": "changed",
+          "description": "Gemini 2.0 Pro now supports up to 4M tokens in the context window (up from 2M).",
+          "url": "https://ai.google.dev/gemini-api/docs/changelog",
+          "is_breaking": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "a3f9b2e1c4d5e6f7081920a3b4c5d6e7",
+    "vendor": "openai",
+    "vendor_display": "OpenAI",
+    "title": "New gpt-4o-2024-08-06 model with structured outputs support",
+    "version": "gpt-4o-2024-08-06",
+    "date": "2024-08-06",
+    "change_type": "added",
+    "description": "We've released gpt-4o-2024-08-06, our latest gpt-4o snapshot. This model supports structured outputs via json_schema and offers improved performance on coding tasks.",
+    "url": "https://platform.openai.com/docs/changelog#new-gpt-4o-2024-08-06",
+    "is_breaking": false,
+    "raw": {
+      "title": "New gpt-4o-2024-08-06 model with structured outputs support",
+      "version": "gpt-4o-2024-08-06",
+      "date": "2024-08-06",
+      "change_type": "added",
+      "description": "We've released gpt-4o-2024-08-06, our latest gpt-4o snapshot. This model supports structured outputs via json_schema and offers improved performance on coding tasks.",
+      "url": "https://platform.openai.com/docs/changelog#new-gpt-4o-2024-08-06"
+    }
+  },
+  {
+    "id": "b1c2d3e4f50617281920314253647586",
+    "vendor": "openai",
+    "vendor_display": "OpenAI",
+    "title": "gpt-3.5-turbo-0613 and gpt-3.5-turbo-16k-0613 deprecation",
+    "version": "gpt-3.5-turbo-0613",
+    "date": "2024-08-15",
+    "change_type": "deprecated",
+    "description": "gpt-3.5-turbo-0613 and gpt-3.5-turbo-16k-0613 will be retired on September 13, 2024. We recommend migrating to gpt-3.5-turbo-0125 or gpt-4o-mini.",
+    "url": "https://platform.openai.com/docs/deprecations#gpt-3.5-turbo-0613",
+    "is_breaking": true,
+    "raw": {
+      "title": "gpt-3.5-turbo-0613 and gpt-3.5-turbo-16k-0613 deprecation",
+      "version": "gpt-3.5-turbo-0613",
+      "date": "2024-08-15",
+      "change_type": "deprecated",
+      "description": "gpt-3.5-turbo-0613 and gpt-3.5-turbo-16k-0613 will be retired on September 13, 2024. We recommend migrating to gpt-3.5-turbo-0125 or gpt-4o-mini.",
+      "url": "https://platform.openai.com/docs/deprecations#gpt-3.5-turbo-0613"
+    }
+  },
+  {
+    "id": "c2d3e4f50617281920314253647586a",
+    "vendor": "openai",
+    "vendor_display": "OpenAI",
+    "title": "Structured outputs now support json_schema for all gpt-4o models",
+    "version": "gpt-4o",
+    "date": "2024-08-06",
+    "change_type": "added",
+    "description": "All gpt-4o models now support structured outputs via json_schema. Use the response_format parameter with type 'json_schema' to enforce a schema.",
+    "url": "https://platform.openai.com/docs/guides/structured-outputs",
+    "is_breaking": false,
+    "raw": {
+      "title": "Structured outputs now support json_schema for all gpt-4o models",
+      "version": "gpt-4o",
+      "date": "2024-08-06",
+      "change_type": "added",
+      "description": "All gpt-4o models now support structured outputs via json_schema. Use the response_format parameter with type 'json_schema' to enforce a schema.",
+      "url": "https://platform.openai.com/docs/guides/structured-outputs"
+    }
+  }
+]

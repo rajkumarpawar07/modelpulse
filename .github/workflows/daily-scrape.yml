@@ -1,0 +1,59 @@
+name: Daily ModelPulse Scrape
+
+# Runs the full ModelPulse pipeline once a day at 09:00 UTC = 14:30 IST.
+# Also runs on push to main (for quick smoke tests) and on manual trigger.
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "collectors.json"
+      - ".github/workflows/daily-scrape.yml"
+
+# Cancel in-progress runs on new push to save credits.
+concurrency:
+  group: modelpulse-scrape
+  cancel-in-progress: true
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BRIGHT_DATA_API_KEY: ${{ secrets.BRIGHT_DATA_API_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      DATABASE_PATH: ./data/modelpulse.db
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run the full pipeline
+        run: npm run all
+
+      - name: Upload raw outputs (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: modelpulse-raw
+          path: raw/
+          retention-days: 7
+
+      - name: Upload database snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: modelpulse-db
+          path: data/modelpulse.db
+          retention-days: 30
