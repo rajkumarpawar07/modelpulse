@@ -1,12 +1,29 @@
 /** @type {import('next').NextConfig} */
+
+// Data files the serverless functions read at runtime. fs reads are not
+// auto-traced, so they must be listed explicitly to ship inside the lambda.
+const DB_FILES = ["./data/modelpulse.db", "./collectors.json"];
+
 const nextConfig = {
   reactStrictMode: true,
-  // The dashboard reads from a local SQLite file. We don't deploy this to
-  // Vercel as a serverless function (Vercel doesn't have a writable
-  // filesystem). The intended deploy is a VPS or Railway. If you want a
-  // static deploy, swap the SQLite reads for fetch() against an API.
+  // The dashboard reads the committed SQLite DB (dashboard/data/modelpulse.db)
+  // read-only. better-sqlite3 is a native module: keep it external to the
+  // serverless bundle, and trace the data files into every route that reads
+  // them. allowScripts in package.json lets its install script
+  // (prebuild-install) run on npm 11.16+/12, which blocks install scripts
+  // by default.
   experimental: {
     serverComponentsExternalPackages: ["better-sqlite3"],
+    outputFileTracingIncludes: {
+      "/": DB_FILES,
+      "/health": DB_FILES,
+      "/timeline": DB_FILES,
+      "/stats": DB_FILES,
+      "/vendor/[slug]": DB_FILES,
+      "/feed": DB_FILES,
+      "/feed/[vendor]": DB_FILES,
+      "/api/changes": DB_FILES,
+    },
   },
 };
 

@@ -32,8 +32,9 @@ with `c_REPLACE_ME`, then run `npx tsx scripts/create-collectors.ts <vendor>`.
 
 ## Commands
 
-- `npm run scrape` — run every enabled collector (+ GitHub Releases sources);
-  auto-heals broken ones (detect → heal → approve → re-run)
+- `npm run scrape` — run every enabled collector (changelog-only; GitHub
+  Releases sources are opt-in per vendor via `github_repo`); auto-heals
+  broken ones (detect → heal → approve → re-run)
 - `VENDOR_FILTER=openai npm run scrape` — one vendor only
 - `npm run diff` / `npm run alert` / `npm run all` — pipeline steps
 - `npm run heal -- <vendor> "what broke"` — on-demand heal via the production path

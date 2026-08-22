@@ -294,11 +294,12 @@ Every change gets a deterministic 0–100 severity score — change type + break
 
 Changelog entries get edited after publication — silently. Every scrape compares each entry field-by-field against what we stored; edits are recorded into the `change_diffs` table (field, old → new), the row gets an `updated_at`, and the dashboard flags edited entries with an ↻ EDITED badge.
 
-### Multi-source ingestion (GitHub Releases)
+### Multi-source ingestion (GitHub Releases) — optional, off by default
 
-Collectors for OpenAI and Anthropic also ingest their Python SDK release notes from GitHub Releases
-(`github_repo` in `collectors.json`), flowing through the same normalizer as scraped changelogs.
-Add `github_repo: "owner/name"` to any other collector entry to do the same. Disable with `ENABLE_GITHUB=false`.
+ModelPulse focuses on **AI API changelog changes** — that is what the impact scoring, breaking-change
+flags, and alerts are built for. If you *also* want a vendor's SDK release notes, add
+`"github_repo": "owner/name"` to that vendor's entry in `collectors.json` and releases flow through
+the same normalizer. No vendor ships with it enabled; set `ENABLE_GITHUB=false` to force changelog-only.
 
 ### Generic webhooks (Zapier / Make / n8n)
 

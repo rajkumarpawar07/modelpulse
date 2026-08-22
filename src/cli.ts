@@ -3,7 +3,7 @@
  * cli.ts — The main entry point.
  *
  * Usage:
- *   npm run scrape    # Run all collectors (+ GitHub release sources)
+ *   npm run scrape    # Run all collectors (+ GitHub release sources, if any vendor opts in)
  *   npm run diff      # Compute the week-over-week diff
  *   npm run alert     # Send the alert (Slack/Discord/generic webhook)
  *   npm run all       # scrape → diff → alert (full pipeline)

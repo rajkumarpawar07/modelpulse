@@ -8,7 +8,6 @@
       "vendor_homepage": "https://openai.com",
       "collector_id": "c_mt35uk633yulmy4ui",
       "url": "https://platform.openai.com/docs/changelog",
-      "github_repo": "openai/openai-python",
       "tier": 1,
       "enabled": true
     },
@@ -18,7 +17,6 @@
       "vendor_homepage": "https://anthropic.com",
       "collector_id": "c_mt35zpsefr1p4nqoc",
       "url": "https://docs.anthropic.com/en/release-notes/overview",
-      "github_repo": "anthropics/anthropic-sdk-python",
       "tier": 1,
       "enabled": true
     },
