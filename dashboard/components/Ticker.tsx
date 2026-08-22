@@ -1,4 +1,4 @@
-import type { Change } from "../../src/types";
+import type { Change } from "../lib/types";
 import { fmtDate } from "./ui";
 
 export function Ticker({ changes }: { changes: Change[] }) {

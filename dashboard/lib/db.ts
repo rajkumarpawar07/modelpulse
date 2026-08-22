@@ -5,12 +5,30 @@
  * scraper can run independently. They share the same .db file.
  */
 import Database from "better-sqlite3";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Change } from "../../src/types.js";
+import type { Change } from "./types";
 
-const DB_PATH = process.env.DATABASE_PATH || join(process.cwd(), "..", "data", "modelpulse.db");
+/**
+ * Resolve the SQLite file across environments:
+ *  1. DATABASE_PATH env (explicit override)
+ *  2. ../data/modelpulse.db — local dev from dashboard/ (the live DB the scraper writes)
+ *  3. ./data/modelpulse.db  — Vercel deploys (DB committed inside dashboard/)
+ */
+function resolveDbPath(): string {
+  const candidates = [
+    process.env.DATABASE_PATH,
+    join(process.cwd(), "..", "data", "modelpulse.db"),
+    join(process.cwd(), "data", "modelpulse.db"),
+  ].filter((p): p is string => Boolean(p));
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return candidates[candidates.length - 1];
+}
+
+const DB_PATH = resolveDbPath();
 
 let _db: Database.Database | null = null;
 

@@ -60,15 +60,21 @@ jobs:
           retention-days: 7
 
       # Commit the database back so history accumulates across runs and the
-      # deployed dashboard always serves fresh data. The push paths filter
-      # above (src/**, collectors.json, workflow) means this data commit
-      # does not re-trigger the workflow.
+      # deployed dashboard always serves fresh data. The DB is synced into
+      # dashboard/ too — that copy is what Vercel deploys, and pushing it
+      # redeploys the dashboard automatically. The push paths filter above
+      # (src/**, collectors.json, workflow) means this data commit does not
+      # re-trigger the workflow.
       - name: Commit updated database
         if: success()
         run: |
+          # Flush the WAL into the main DB file so the committed .db is complete
+          node -e "const D=require('better-sqlite3');const d=new D('./data/modelpulse.db');d.pragma('wal_checkpoint(TRUNCATE)');d.close()"
+          cp data/modelpulse.db dashboard/data/modelpulse.db
+          cp collectors.json dashboard/collectors.json
           git config user.name "modelpulse-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add data/modelpulse.db
+          git add data/modelpulse.db dashboard/data/modelpulse.db dashboard/collectors.json
           if git diff --cached --quiet; then
             echo "No database changes to commit."
           else

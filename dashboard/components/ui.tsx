@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { ChangeType } from "../../src/types";
+import type { ChangeType } from "../lib/types";
 
 export const TYPE_META: Record<
   ChangeType,

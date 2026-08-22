@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Change, ChangeType } from "../../src/types";
+import type { Change, ChangeType } from "../lib/types";
 import { SignalRow } from "./SignalRow";
 import { Hud, TYPE_META, daysAgoLabel, fmtDateLong } from "./ui";
 

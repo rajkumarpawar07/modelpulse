@@ -25,6 +25,9 @@ data/*.db-journal
 data/*.db-wal
 data/*.db-shm
 data/*-test.db
+dashboard/data/*.db-journal
+dashboard/data/*.db-wal
+dashboard/data/*.db-shm
 raw/
 !raw/.gitkeep
 

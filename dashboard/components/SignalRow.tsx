@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { Change } from "../../src/types";
+import type { Change } from "../lib/types";
 import { TypeChip, TYPE_META, daysAgoLabel, fmtDate } from "./ui";
 
 function toMarkdown(c: Change): string {
