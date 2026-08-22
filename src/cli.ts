@@ -26,7 +26,7 @@ import {
   listWatches,
   startHeal,
   finishHeal,
-  getConsecutiveFailures,
+  getLastHealAgeHours,
 } from './db.js';
 import {
   runCollector,
@@ -178,19 +178,23 @@ async function cmdScrape(): Promise<void> {
 
   // ── Auto-heal: detect → heal → approve → re-run ────────────────────
   const autoHeal = process.env.AUTO_HEAL !== 'false';
-  const healCooldown = Math.max(1, parseInt(process.env.HEAL_MAX_CONSECUTIVE_FAILURES || '3', 10));
+  const healCooldownH = parseFloat(process.env.HEAL_COOLDOWN_HOURS || '20');
+  const regenCooldownH = parseFloat(process.env.REGEN_COOLDOWN_HOURS || '48');
   if (autoHeal && failedCollectors.length > 0) {
     console.log(`\n🩺 Auto-heal: ${failedCollectors.length} collector(s) need attention...\n`);
 
     for (const { collector, reason } of failedCollectors) {
-      // Circuit breaker: if this vendor has failed many times in a row,
-      // healing is probably not going to help (site down, blocked, gone).
-      // Skip and surface it loudly instead of burning credits daily.
-      const consecutive = getConsecutiveFailures(db, collector.vendor);
-      if (consecutive >= healCooldown) {
+      const needsTemplate = /does not have a template|collector disabled/i.test(reason);
+
+      // Cooldown: one repair attempt per window per vendor. Unlike a count
+      // breaker this self-recovers — when the window passes, the vendor gets
+      // another attempt even after many failures.
+      const cooldownH = needsTemplate ? regenCooldownH : healCooldownH;
+      const lastAttemptH = getLastHealAgeHours(db, collector.vendor);
+      if (lastAttemptH !== null && lastAttemptH < cooldownH) {
         console.log(
-          `  ⛔ ${collector.vendor_display.padEnd(16)} skipped — ${consecutive} consecutive failures. ` +
-          `Heal circuit breaker open; investigate manually or reset with a successful run.`
+          `  ⏳ ${collector.vendor_display.padEnd(16)} skipped — repair attempted ${Math.round(lastAttemptH)}h ago ` +
+          `(cooldown ${cooldownH}h). Next attempt in ~${Math.ceil(cooldownH - lastAttemptH)}h.`
         );
         continue;
       }
@@ -208,7 +212,6 @@ async function cmdScrape(): Promise<void> {
       //  - collector has no template at all (or is disabled) → queue AI
       //    template generation; nothing to refactor yet
       //  - otherwise → refactor the existing template (classic heal)
-      const needsTemplate = /does not have a template|collector disabled/i.test(reason);
       if (needsTemplate) {
         const queued = await generateTemplate(collector.collector_id, collector.url);
         if (!queued) {
@@ -222,27 +225,33 @@ async function cmdScrape(): Promise<void> {
         continue; // no point re-running before the template exists
       }
 
-      const interactionId = await healCollector(collector.collector_id, healPrompt);
-      if (!interactionId) {
-        finishHeal(db, healId, 'failed', null, 'Heal API returned null');
-        console.log('❌ heal request failed');
+      const submit = await healCollector(collector.collector_id, healPrompt);
+      if (submit.status === 'failed') {
+        finishHeal(db, healId, 'failed', null, submit.error);
+        console.log(`❌ ${submit.error}`);
         continue;
       }
 
-      // Wait for the AI refactor to reach its approval gate before approving,
-      // so we never approve a half-written template.
+      // Either a fresh job was submitted, or a previous heal is still running
+      // server-side (HTTP 409) — in both cases the recovery path is the same:
+      // wait for the job's approval gate, then approve and re-run.
+      const interactionId = submit.status === 'submitted' ? submit.id : null;
+      if (submit.status === 'inflight') {
+        console.log('\n     ℹ️  a previous heal job is still in progress — adopting it');
+      }
+
       const gate = await waitForHealApproval(collector.collector_id);
       if (gate === 'failed') {
         finishHeal(db, healId, 'failed', interactionId, 'Self-healing job failed');
-        console.log(`❌ self-healing job failed (${interactionId})`);
+        console.log(`❌ self-healing job failed${interactionId ? ` (${interactionId})` : ''}`);
         continue;
       }
       if (gate === 'timeout') {
         // Never approve a job that hasn't reached its gate — approving early
         // fails server-side and can kill the in-flight refactor. Leave it
-        // pending; the next daily run picks it up.
+        // pending; the next daily run adopts it via the 409 path.
         finishHeal(db, healId, 'healed', interactionId, 'Approval gate not reached in time; left for next run');
-        console.log(`⚠️ heal submitted but gate not reached in time (${interactionId}) — next run will verify`);
+        console.log(`⚠️ heal in progress but gate not reached in time — next run will adopt and approve it`);
         continue;
       }
 
@@ -250,12 +259,12 @@ async function cmdScrape(): Promise<void> {
         const approved = await approveHeal(collector.collector_id);
         if (!approved) {
           finishHeal(db, healId, 'healed', interactionId, 'Auto-approve failed');
-          console.log(`⚠️ healed but approve failed (${interactionId})`);
+          console.log(`⚠️ healed but approve failed${interactionId ? ` (${interactionId})` : ''}`);
           continue;
         }
       }
       finishHeal(db, healId, 'approved', interactionId);
-      console.log(`✅ healed & approved (${interactionId})`);
+      console.log(`✅ healed & approved${interactionId ? ` (${interactionId})` : ''}`);
 
       // Re-run the healed collector — up to HEAL_RERUN_ATTEMPTS times.
       const maxAttempts = Math.max(1, parseInt(process.env.HEAL_RERUN_ATTEMPTS || '2', 10));
@@ -415,15 +424,21 @@ async function cmdHeal(rest: string[]): Promise<void> {
     (whatBroke ? `What broke: ${whatBroke}. ` : '') +
     'Same output schema as before.';
 
-  const interactionId = await healCollector(collector.collector_id, healPrompt);
-  if (!interactionId) {
-    finishHeal(db, healId, 'failed', null, 'Heal API returned null');
-    console.error('❌ Heal request failed.');
+  const submit = await healCollector(collector.collector_id, healPrompt);
+  if (submit.status === 'failed') {
+    finishHeal(db, healId, 'failed', null, submit.error);
+    console.error(`❌ ${submit.error}`);
     process.exitCode = 1;
     return;
   }
+  const interactionId = submit.status === 'submitted' ? submit.id : null;
+  if (submit.status === 'inflight') {
+    console.log('  ℹ️  a previous heal job is still in progress — adopting it');
+  }
 
-  console.log(`  Heal job: ${interactionId} — waiting for the approval gate...`);
+  if (interactionId) {
+    console.log(`  Heal job: ${interactionId} — waiting for the approval gate...`);
+  }
   const gate = await waitForHealApproval(collector.collector_id);
   if (gate === 'failed') {
     finishHeal(db, healId, 'failed', interactionId, 'Self-healing job failed');
@@ -433,7 +448,7 @@ async function cmdHeal(rest: string[]): Promise<void> {
   }
   if (gate === 'timeout') {
     finishHeal(db, healId, 'healed', interactionId, 'Approval gate not reached in time');
-    console.log(`⚠️ Heal submitted (${interactionId}) but the approval gate wasn't reached. Re-run later: bdata scraper approve ${collector.collector_id}`);
+    console.log(`⚠️ Heal in progress but the approval gate wasn't reached. Re-run later: npm run heal -- ${vendor}`);
     process.exitCode = 1;
     return;
   }
@@ -442,13 +457,13 @@ async function cmdHeal(rest: string[]): Promise<void> {
     const approved = await approveHeal(collector.collector_id);
     if (!approved) {
       finishHeal(db, healId, 'healed', interactionId, 'Approve failed');
-      console.log(`⚠️ Healed but approve failed (${interactionId}). Run: bdata scraper approve ${collector.collector_id}`);
+      console.log(`⚠️ Healed but approve failed. Run: bdata scraper approve ${collector.collector_id}`);
       process.exitCode = 1;
       return;
     }
   }
   finishHeal(db, healId, 'approved', interactionId);
-  console.log(`✅ Healed & approved (${interactionId})\n`);
+  console.log(`✅ Healed & approved${interactionId ? ` (${interactionId})` : ''}\n`);
 
   // Verify with a real re-run on the same c_* ID.
   process.stdout.write(`🔄 Re-running ${collector.vendor_display} to verify ... `);

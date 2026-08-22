@@ -155,8 +155,11 @@ on its own:
    but `title`/`date`/`change_type` is missing from a majority of entries —
    `detectPartialFailure()` in `src/normalize.ts`). Partial breakage is the
    classic post-redesign failure mode where naive 0-row checks stay silent.
-2. **Circuit-break** — a vendor with 3+ consecutive failed runs is skipped
-   (healing a dead site just burns credits) and surfaced on `/health`.
+2. **Cooldown** — a vendor gets one repair attempt per window (20h heal /
+   48h template regeneration) instead of a daily credit burn. Unlike a
+   count-based breaker this self-recovers when the window passes, and an
+   in-flight server-side heal (HTTP 409) is adopted and approved rather
+   than duplicated.
 3. **Heal** — `POST /dca/collectors/{c_*}/refactor_template` with a prompt
    describing what broke (or `automate_template` to regenerate a collector
    whose template never finished generating — a distinct failure mode the

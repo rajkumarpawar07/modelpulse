@@ -211,7 +211,7 @@ steps.forEach((st, i) => {
 card(s, 6.35, 1.58, 3.1, 2.56, C.panel2);
 s.addText("SAME RUN, UNSUPERVISED", { x: 6.58, y: 1.76, w: 2.7, h: 0.26, fontFace: F.mono, fontSize: 9.5, bold: true, color: C.ink, margin: 0 });
 const also = [
-  "Circuit breaker skipped 6 vendors failing 3+ runs — no wasted heals",
+  "Repair cooldown — one attempt per vendor per window, no wasted heals",
   "Template regeneration queued for 4 collectors missing templates",
   "Transient 502s retried, not fatal",
 ];

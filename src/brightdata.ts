@@ -213,12 +213,22 @@ export async function loadCollectors(): Promise<Collector[]> {
 /**
  * Heal a broken collector via POST /dca/collectors/{id}/refactor_template.
  * Body: {"prompt": "<what broke>", "custom_input": []} (prompt max 1000 chars).
- * Returns the job/interaction id on success, or null if the API call fails.
+ *
+ * Outcomes:
+ *  - submitted: new self-healing job queued (returns its id)
+ *  - inflight:  HTTP 409 — a previous heal job is still running server-side;
+ *               the caller should adopt it (poll progress, approve, re-run)
+ *  - failed:    the API rejected the request (error carries the reason)
  */
+export type HealSubmitResult =
+  | { status: 'submitted'; id: string }
+  | { status: 'inflight' }
+  | { status: 'failed'; error: string };
+
 export async function healCollector(
   collectorId: string,
   prompt: string,
-): Promise<string | null> {
+): Promise<HealSubmitResult> {
   const healUrl = `${BRIGHTDATA_BASE}/dca/collectors/${encodeURIComponent(collectorId)}/refactor_template`;
   try {
     const res = await request(healUrl, {
@@ -230,17 +240,21 @@ export async function healCollector(
       body: JSON.stringify({ prompt: prompt.slice(0, 1000), custom_input: [] }),
     });
 
+    if (res.statusCode === 409) {
+      await res.body.dump();
+      return { status: 'inflight' };
+    }
+
     if (res.statusCode >= 400) {
       const body = await res.body.text();
-      console.error(`  ❌ Heal API failed for ${collectorId} (HTTP ${res.statusCode}): ${body.slice(0, 200)}`);
-      return null;
+      return { status: 'failed', error: `Heal API HTTP ${res.statusCode}: ${body.slice(0, 200)}` };
     }
 
     const json = (await res.body.json().catch(() => ({}))) as { id?: string; interaction_id?: string; job_id?: string };
-    return json.id || json.interaction_id || json.job_id || 'heal-submitted';
+    const id = json.id || json.interaction_id || json.job_id || 'heal-submitted';
+    return { status: 'submitted', id };
   } catch (err) {
-    console.error(`  ❌ Heal request error for ${collectorId}: ${(err as Error).message}`);
-    return null;
+    return { status: 'failed', error: `Heal request error: ${(err as Error).message}` };
   }
 }
 

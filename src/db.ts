@@ -458,13 +458,15 @@ export function getCollectorHealth(db: Database.Database): CollectorHealth[] {
 }
 
 /**
- * How many of the most recent runs for a vendor failed consecutively.
- * Used to stop the auto-heal loop from burning credits on a vendor whose
- * site is down or permanently blocked.
+ * How many of the most recent collector runs for a vendor failed consecutively.
+ * GitHub-source runs (collector_id 'gh:…') are excluded — their success must
+ * not mask a failing Bright Data collector.
  */
 export function getConsecutiveFailures(db: Database.Database, vendor: string): number {
   const rows = db.prepare(`
-    SELECT status FROM runs WHERE vendor = ? ORDER BY id DESC LIMIT 10
+    SELECT status FROM runs
+    WHERE vendor = ? AND collector_id NOT LIKE 'gh:%'
+    ORDER BY id DESC LIMIT 10
   `).all(vendor) as Array<{ status: string }>;
   let n = 0;
   for (const r of rows) {
@@ -472,6 +474,24 @@ export function getConsecutiveFailures(db: Database.Database, vendor: string): n
     n += 1;
   }
   return n;
+}
+
+/**
+ * Hours since the last heal attempt for a vendor (null if never attempted).
+ * Drives the heal cooldown: a stuck vendor gets one attempt per cooldown
+ * window instead of a daily burn, and recovers on its own when the window
+ * passes — unlike a count-based breaker, it can never lock a vendor out
+ * forever.
+ */
+export function getLastHealAgeHours(db: Database.Database, vendor: string): number | null {
+  const row = db.prepare(`
+    SELECT started_at FROM heals WHERE vendor = ? ORDER BY id DESC LIMIT 1
+  `).get(vendor) as { started_at: string } | undefined;
+  if (!row) return null;
+  // started_at is SQLite CURRENT_TIMESTAMP: "YYYY-MM-DD HH:MM:SS" (UTC)
+  const t = Date.parse(row.started_at.replace(' ', 'T') + 'Z');
+  if (isNaN(t)) return null;
+  return (Date.now() - t) / 3_600_000;
 }
 
 /** Close the database. (Called on process exit.) */

@@ -105,7 +105,7 @@ bdata scraper approve c_mistral_xxx
 `npm run scrape` runs the full detect → heal → approve → re-run loop without any human step:
 
 1. **Detect** — a collector that errors, returns **0 rows**, or returns rows where a required field (`title`, `date`, `change_type`) is missing from the majority of entries is flagged. That last check catches *partial breakage*: the classic post-redesign failure where rows still come back but the fields have quietly gone null.
-2. **Circuit-break** — if a vendor has failed 3+ runs in a row, healing is skipped (the site is probably down or gone, and repeated heals just burn credits). Visible on the `/health` dashboard page.
+2. **Cooldown** — a vendor gets one repair attempt per window (20h for heals, 48h for template regeneration) instead of burning credits every day. Unlike a count-based breaker it self-recovers when the window passes, and a heal job still running server-side (HTTP 409) is adopted — polled and approved — rather than duplicated. Visible on the `/health` dashboard page.
 3. **Heal** — `POST /dca/collectors/{id}/refactor_template` with a reason describing what broke.
 4. **Wait** — poll the collector until the AI refactor reports finished, so we never approve a half-written template.
 5. **Approve & re-run** — approve the healed template and re-run the same `c_*` collector (up to 2 attempts), with results upserted as usual.
@@ -242,7 +242,7 @@ npm run typecheck     # TypeScript validation
 
 Tuning knobs (all optional env vars): `SCRAPE_CONCURRENCY` (default 4),
 `SCRAPE_TIMEOUT_MS` (default 300000), `HEAL_RERUN_ATTEMPTS` (default 2),
-`HEAL_MAX_CONSECUTIVE_FAILURES` (default 3, the circuit breaker).
+`HEAL_COOLDOWN_HOURS` (default 20), `REGEN_COOLDOWN_HOURS` (default 48).
 
 ---
 

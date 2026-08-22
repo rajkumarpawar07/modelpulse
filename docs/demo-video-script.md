@@ -96,7 +96,7 @@ word-for-word *targets*, but natural beats matter more than exact wording.
 > with 29 rows — but every single `change_type` was null. Classic silent
 > breakage. The pipeline detected it, healed the collector, approved the fix,
 > and re-ran: **29 rows recovered, same `c_*` ID, zero code changes**. Same
-> run: the circuit breaker skipped vendors that were down instead of burning
+> run: the cooldown skipped vendors that were down instead of burning
 > heal attempts. Full transcript is in the repo.
 
 *(Advance)*
@@ -174,7 +174,7 @@ Open `http://localhost:3000/api/changes?breaking=true` in a new tab → then
 ## Backup plans (if something breaks mid-record)
 
 - **A collector shows FAILED on /health** — that's *fine*, even good: point at
-  it and say "that's the circuit breaker doing its job — this vendor's
+  it and say "that's the repair cooldown doing its job — this vendor's
   template is regenerating server-side; the system skips it instead of
   burning heal attempts."
 - **Dashboard empty** — you skipped the DB: run `npm run scrape` once (or

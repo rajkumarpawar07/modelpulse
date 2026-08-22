@@ -17,6 +17,8 @@ import {
   startRun,
   finishRun,
   getConsecutiveFailures,
+  getLastHealAgeHours,
+  startHeal,
   getStats,
 } from '../db.js';
 import type { Change } from '../types.js';
@@ -100,7 +102,7 @@ describe('upsertChanges', () => {
   });
 });
 
-describe('getConsecutiveFailures (heal circuit breaker)', () => {
+describe('getConsecutiveFailures (collector-run health)', () => {
   it('counts trailing failures and resets on success', () => {
     const db = getDb();
     const vendor = 'breaker';
@@ -119,6 +121,35 @@ describe('getConsecutiveFailures (heal circuit breaker)', () => {
     const r4 = startRun(db, vendor, 'c_breaker');
     finishRun(db, r4, 'failed', 0, 'boom');
     expect(getConsecutiveFailures(db, vendor)).toBe(1);
+  });
+
+  it('ignores GitHub-source runs — their success must not mask a failing collector', () => {
+    const db = getDb();
+    const vendor = 'ghmask';
+    const r1 = startRun(db, vendor, 'c_ghmask');
+    finishRun(db, r1, 'failed', 0, 'trigger 403');
+    const r2 = startRun(db, vendor, 'gh:owner/repo');
+    finishRun(db, r2, 'success', 10);
+    const r3 = startRun(db, vendor, 'c_ghmask');
+    finishRun(db, r3, 'failed', 0, 'trigger 403');
+    expect(getConsecutiveFailures(db, vendor)).toBe(2);
+  });
+});
+
+describe('getLastHealAgeHours (heal cooldown)', () => {
+  it('returns null when a vendor was never heal-attempted', () => {
+    const db = getDb();
+    expect(getLastHealAgeHours(db, 'never-healed-vendor')).toBeNull();
+  });
+
+  it('returns ~0 hours for a heal recorded now', () => {
+    const db = getDb();
+    const vendor = 'fresh-heal';
+    startHeal(db, vendor, 'c_fresh', 'test reason');
+    const age = getLastHealAgeHours(db, vendor);
+    expect(age).not.toBeNull();
+    expect(age!).toBeGreaterThanOrEqual(0);
+    expect(age!).toBeLessThan(1);
   });
 });
 

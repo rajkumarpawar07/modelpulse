@@ -47,7 +47,7 @@ audit trail (reason, interaction ID, timestamps).
 - Anthropic's transient 502 degraded into a slow dataset; the pipeline healed
   the collector (`ia_mt3bcpnuo5ux6zu0k` approved) and left re-verification to
   the next daily run rather than blocking.
-- The circuit breaker correctly refused to burn heal attempts on vendors with
+- The repair cooldown correctly refused to burn heal attempts on vendors with
   3+ consecutive failures (template generation still pending server-side),
   surfacing them on `/health` instead of retrying blindly.
 
