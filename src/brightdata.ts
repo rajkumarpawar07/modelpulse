@@ -104,12 +104,8 @@ async function pollDataset(
     }
 
     const text = await datasetRes.body.text();
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      continue;
-    }
+    const parsed = parseMaybeNdjson(text);
+    if (parsed === null) continue; // not JSON or NDJSON yet — keep polling
 
     const unwrapped = unwrapDataset(parsed);
     if (unwrapped !== null) {
@@ -233,12 +229,28 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * The dataset endpoint returns different shapes depending on state:
- *   - bare JSON array when ready (some collectors)
- *   - {"entries": [...]} / {"results": [...]} / {"data": [...]} when ready
- *   - {"status": "building|pending|...", ...} while processing
- * Normalize all of these to an array (or null = keep waiting).
+ * Parse a dataset response body that may be either a single JSON document
+ * or NDJSON (one row object per line — Anthropic, Cohere, GLM, and Kimi
+ * collectors return their ready data this way). Returns null when the body
+ * is neither (e.g. an HTML error page mid-poll).
  */
+export function parseMaybeNdjson(text: string): unknown | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return null;
+    const objs: unknown[] = [];
+    for (const line of lines) {
+      try {
+        objs.push(JSON.parse(line));
+      } catch {
+        return null; // not NDJSON either
+      }
+    }
+    return objs;
+  }
+}
 export function unwrapDataset(parsed: unknown): Dataset | null {
   if (Array.isArray(parsed)) return parsed;
   if (parsed && typeof parsed === 'object') {

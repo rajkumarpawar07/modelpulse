@@ -6,7 +6,7 @@
  * return null (keep polling) for in-flight states.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { unwrapDataset, savePendingJob, loadPendingJobs, clearPendingJob } from '../brightdata.js';
+import { unwrapDataset, parseMaybeNdjson, savePendingJob, loadPendingJobs, clearPendingJob } from '../brightdata.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,6 +21,26 @@ beforeAll(() => {
 afterAll(() => {
   delete process.env.PENDING_JOBS_PATH;
   rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe('parseMaybeNdjson', () => {
+  it('parses single JSON documents unchanged', () => {
+    expect(parseMaybeNdjson('{"status":"building"}')).toEqual({ status: 'building' });
+    expect(parseMaybeNdjson('[{"a":1}]')).toEqual([{ a: 1 }]);
+  });
+
+  it('parses NDJSON bodies — one row object per line', () => {
+    const ndjson = '{"title":"row 1","date":"2026-08-20"}\n{"title":"row 2","date":"2026-08-19"}\n';
+    expect(parseMaybeNdjson(ndjson)).toEqual([
+      { title: 'row 1', date: '2026-08-20' },
+      { title: 'row 2', date: '2026-08-19' },
+    ]);
+  });
+
+  it('returns null for non-JSON bodies (HTML error pages)', () => {
+    expect(parseMaybeNdjson('<html>502</html>')).toBeNull();
+    expect(parseMaybeNdjson('')).toBeNull();
+  });
 });
 
 describe('pending job map', () => {
