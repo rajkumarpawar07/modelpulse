@@ -71,6 +71,10 @@ jobs:
           # Flush the WAL into the main DB file so the committed .db is complete
           node -e "const D=require('better-sqlite3');const d=new D('./data/modelpulse.db');d.pragma('wal_checkpoint(TRUNCATE)');d.close()"
           cp data/modelpulse.db dashboard/data/modelpulse.db
+          # The deployed copy must NOT be in WAL mode: Vercel's read-only
+          # filesystem can't create the -shm/-wal sidecars a WAL database
+          # needs even for readonly opens. Rollback journal opens clean.
+          node -e "const D=require('better-sqlite3');const d=new D('./dashboard/data/modelpulse.db');d.pragma('journal_mode = DELETE');d.close()"
           cp collectors.json dashboard/collectors.json
           git config user.name "modelpulse-bot"
           git config user.email "actions@users.noreply.github.com"
