@@ -87,8 +87,10 @@ async function scrapeOne(collector: Collector): Promise<ScrapeResult> {
     };
   } catch (err) {
     const msg = (err as Error).message;
-    finishRun(db, runId, 'failed', 0, msg);
-    console.log(`  ❌ ${collector.vendor_display.padEnd(20)} — ${msg.slice(0, 80)}`);
+    const isTimeout = msg.startsWith('Timeout');
+    finishRun(db, runId, isTimeout ? 'timeout' : 'failed', 0, msg);
+    const icon = isTimeout ? '⏳' : '❌';
+    console.log(`  ${icon} ${collector.vendor_display.padEnd(20)} — ${msg.slice(0, 80)}`);
     return { collector, ok: false, rows: 0, inserted: 0, updated: 0, changes: [], error: msg };
   }
 }
@@ -122,6 +124,7 @@ async function cmdScrape(): Promise<void> {
 
   let totalChanges = 0;
   let totalFailures = 0;
+  let totalTimeouts = 0;
   const allChanges: Change[] = [];
   const failedCollectors: FailedCollector[] = [];
 
@@ -143,11 +146,20 @@ async function cmdScrape(): Promise<void> {
         });
       }
     } else {
-      totalFailures += 1;
-      failedCollectors.push({
-        collector: r.collector,
-        reason: `Scrape error: ${r.error!.slice(0, 200)}`,
-      });
+      // Timeouts mean the dataset job is still running server-side — not a
+      // broken scraper.  runCollector() already saved the collection_id to
+      // pending-jobs.json; the next run resumes it.  Healing a slow-but-
+      // working collector is counterproductive, so exclude timeouts.
+      const isTimeout = r.error?.startsWith('Timeout');
+      if (isTimeout) {
+        totalTimeouts += 1;
+      } else {
+        totalFailures += 1;
+        failedCollectors.push({
+          collector: r.collector,
+          reason: `Scrape error: ${r.error!.slice(0, 200)}`,
+        });
+      }
     }
   }
 
@@ -174,7 +186,8 @@ async function cmdScrape(): Promise<void> {
     }
   }
 
-  console.log(`\n📊 Scrape complete: ${totalChanges}+ total rows, ${totalFailures} failure(s).`);
+  const pendingStr = totalTimeouts > 0 ? `, ${totalTimeouts} pending (resume next run)` : '';
+  console.log(`\n📊 Scrape complete: ${totalChanges}+ total rows, ${totalFailures} failure(s)${pendingStr}.`);
 
   // ── Auto-heal: detect → heal → approve → re-run ────────────────────
   const autoHeal = process.env.AUTO_HEAL !== 'false';

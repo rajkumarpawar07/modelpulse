@@ -33,9 +33,10 @@ jobs:
       WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       DATABASE_PATH: ./data/modelpulse.db
       AUTO_HEAL: "true"
-      # Several vendors' dataset jobs legitimately take 5–10 min to finish;
-      # 300s was failing Anthropic/Cohere/Replicate with data waiting.
-      SCRAPE_TIMEOUT_MS: "600000"
+      # Slow vendors (Anthropic, Cohere, etc.) routinely exceed any single-run
+      # timeout.  A 5-min window lets fast vendors finish; slow ones save to
+      # pending-jobs.json and resume on the next run — zero extra credits.
+      SCRAPE_TIMEOUT_MS: "300000"
     steps:
       - uses: actions/checkout@v4
 
@@ -90,6 +91,24 @@ jobs:
           else
             git commit -m "chore(data): daily scrape update [skip ci]"
             git push
+          fi
+
+      # Persist pending-jobs.json even on failure or cancellation.  Without
+      # this, timed-out collection_ids are lost and the next run re-triggers
+      # the jobs from scratch — wasting Bright Data credits and restarting
+      # the processing clock on slow vendors.
+      - name: Persist pending jobs
+        if: always()
+        run: |
+          if [ -f data/pending-jobs.json ]; then
+            git config user.name "modelpulse-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add data/pending-jobs.json
+            if ! git diff --cached --quiet; then
+              git commit -m "chore(data): save pending jobs [skip ci]"
+              git pull --rebase origin main || true
+              git push || true
+            fi
           fi
 
       - name: Upload database snapshot
