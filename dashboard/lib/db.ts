@@ -5,38 +5,63 @@
  * scraper can run independently. They share the same .db file.
  */
 import Database from "better-sqlite3";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, copyFileSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { Change } from "./types";
 
 /**
- * Resolve the SQLite file across environments:
+ * Candidate DB locations, in preference order:
  *  1. DATABASE_PATH env (explicit override)
  *  2. ../data/modelpulse.db — local dev from dashboard/ (the live DB the scraper writes)
  *  3. ./data/modelpulse.db  — Vercel deploys (DB committed inside dashboard/)
  *  4. $LAMBDA_TASK_ROOT/data/modelpulse.db — AWS-style serverless layouts
  */
-function resolveDbPath(): string {
-  const candidates = [
+function dbCandidates(): string[] {
+  return [
     process.env.DATABASE_PATH,
     join(process.cwd(), "..", "data", "modelpulse.db"),
     join(process.cwd(), "data", "modelpulse.db"),
     process.env.LAMBDA_TASK_ROOT ? join(process.env.LAMBDA_TASK_ROOT, "data", "modelpulse.db") : null,
   ].filter((p): p is string => Boolean(p));
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-  return candidates[candidates.length - 1];
 }
 
-const DB_PATH = resolveDbPath();
+/**
+ * Open the first candidate that actually works. Existing is not enough:
+ * on Vercel's read-only filesystem a WAL-mode database cannot be opened
+ * even readonly (SQLite must create -shm/-wal sidecars). When a readonly
+ * open fails, copy the bytes to /tmp — the one writable location in a
+ * lambda — and open the copy read-write there. That path works for any
+ * journal mode and any source-file permission quirk.
+ */
+function openDb(): Database.Database {
+  for (const p of dbCandidates()) {
+    if (!existsSync(p)) continue;
+    try {
+      return new Database(p, { readonly: true });
+    } catch {
+      try {
+        const st = statSync(p);
+        const tmp = join(tmpdir(), `modelpulse-${st.size}-${Math.round(st.mtimeMs)}.db`);
+        copyFileSync(p, tmp);
+        return new Database(tmp);
+      } catch {
+        // this candidate is unusable — try the next one
+      }
+    }
+  }
+  // Nothing opened; return a handle to the preferred path so callers'
+  // try/catch keeps rendering empty states instead of crashing pages.
+  const fallback = dbCandidates()[0];
+  return new Database(fallback, { readonly: true, fileMustExist: false });
+}
 
 let _db: Database.Database | null = null;
 
 function db(): Database.Database {
   if (_db) return _db;
-  _db = new Database(DB_PATH, { readonly: true, fileMustExist: false });
+  _db = openDb();
   return _db;
 }
 
