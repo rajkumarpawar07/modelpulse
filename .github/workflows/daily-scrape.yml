@@ -36,7 +36,7 @@ jobs:
       # Slow vendors (Anthropic, Cohere, etc.) routinely exceed any single-run
       # timeout.  A 5-min window lets fast vendors finish; slow ones save to
       # pending-jobs.json and resume on the next run — zero extra credits.
-      SCRAPE_TIMEOUT_MS: "300000"
+      SCRAPE_TIMEOUT_MS: "600000"
     steps:
       - uses: actions/checkout@v4
 
