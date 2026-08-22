@@ -1,190 +1,119 @@
-# ModelPulse — 5-Minute Demo Video Script
+# ModelPulse — 5-Minute Demo Video Script (v2)
 
-Deck: `docs/modelpulse-demo-deck.pptx` · Total runtime target: **5:00**
-(PPT ≈ 2:50, live demo ≈ 2:10). Speak it, don't read it — the lines below are
-word-for-word *targets*, but natural beats matter more than exact wording.
+Deck: `docs/modelpulse-demo-deck.pptx` (4 slides) · Live site: **https://modelpulse-ruby.vercel.app**
+Total: **5:00** — deck ≈ 1:30, live demo ≈ 3:30. The deck is visual; the demo is the star.
 
 ---
 
 ## Before you hit record (5-minute checklist)
 
-1. **Dashboard URL** — `modelpulse.vercel.app` currently serves an **unrelated
-   old project**. Either redeploy this dashboard to Vercel before recording,
-   or record against `http://localhost:3000` (start it with
-   `cd dashboard && npm run dev`). Localhost is fine for the judges — say
-   "running locally, same code as the deployed build".
-2. **Terminal prep** — open a terminal in the repo and have the output of the
-   last real `npm run scrape` scrollable (or run `VENDOR_FILTER=fireworks
-   npm run scrape` ~10 min before recording and leave the window open). The
-   heal section is what you'll scroll to.
-3. **API key** — make sure no `.env` content is visible anywhere in the
-   recording. Close notification apps (Slack/Discord/Email).
-4. **Record at 1920×1080**, browser zoom 100%, dark terminal, Oceans/Fira
-   code font. Presenter view OFF for the PPT part (use full-screen slideshow).
-5. **Do one dry run** of the whole click path below before recording.
+1. **Open these tabs now**, in order: the dashboard (`/`), `/health`, `/api/changes?breaking=true`,
+   `/feed/openai`, and the repo on GitHub. One browser window, pinned tabs (Ctrl+1..5).
+2. **Terminal prep**: a terminal scrolled to the heal section of a real `npm run scrape` run
+   (or `docs/live-heal-log.md` open as backup).
+3. Close notifications; 1920×1080; browser zoom 100%; dark terminal.
+4. **Do one dry run** of the whole click path before recording.
 
 ---
 
-## PART 1 — THE DECK (0:00 – 2:50)
+## PART 1 — THE DECK (0:00 – 1:30)
 
-### Slide 1 — Title (0:00 – 0:15)
+### Slide 1 — Title (0:00 – 0:12)
 
-> Hi, I'm Raj, and this is **ModelPulse** — AI API change intelligence, built
-> for the Scrape-Verse hackathon on Bright Data's Scraper Studio. The pitch is
-> one sentence: **catch breaking changes in AI vendor APIs before your code
-> does.**
+> I'm Raj, and this is **ModelPulse** — AI API change intelligence, built for Scrape-Verse on
+> Bright Data Scraper Studio. One sentence: **catch breaking changes in AI vendor APIs before
+> your code does.**
 
-*(Advance)*
+### Slide 2 — One radar. Ten vendors. (0:12 – 0:45)
 
-### Slide 2 — The Problem (0:15 – 0:50)
-
-> If you build on OpenAI, Anthropic, Mistral, Cohere — any of them — you know
-> this cycle. They ship breaking changes **weekly**: models get deprecated,
-> parameters disappear, auth changes. Entries get **silently edited** after
-> publication. And you find out from your **error logs** — production is
-> already down.
+> The problem is on top: vendors ship breaking changes weekly, they silently edit published
+> entries, and you find out from your error logs.
 >
-> And no, just subscribing to RSS doesn't fix it. Half these vendors have **no
-> feed at all**. Feeds are **prose, not schema** — no change type, no breaking
-> flag. Feeds never tell you an entry was **edited**. And a feed can't **fail
-> your CI build**.
+> The system is the diagram: ten AI vendors, each watched by a Scraper Studio collector — that's
+> the green zone, Bright Data runs all of it. Every change normalizes into one schema with an
+> impact score, lands in SQLite with full history, and comes out where you work: Slack alerts,
+> a CI gate that fails your build, RSS, and a JSON API.
 
-*(Advance)*
+### Slide 3 — Detect. Heal. Recover. (0:45 – 1:22)
 
-### Slide 3 — The Solution (0:50 – 1:20)
+> This is the part that matters, and it's not a mockup. During a real run, Fireworks'
+> collector returned 29 rows — but every single `change_type` was null. Silent breakage.
+> The pipeline detected it, sent one heal prompt to the **same collector ID**, approved the
+> fix at the gate, and re-ran: 29 rows recovered, zero code changes. Same `c_*` ID before
+> and after — that's self-healing. It runs unattended every day at 9 UTC, and every attempt
+> is audited on the health page.
 
-> ModelPulse is one radar over ten vendors. Ten Scraper Studio collectors,
-> one per vendor, normalize everything into **one schema** — title, date,
-> change type, and a 0-to-100 **impact score**. Every scrape is diffed
-> field-by-field, so **silent edits** get flagged with an EDITED badge. And
-> the output is actionable: keyword watches, Slack and Discord alerts, RSS
-> feeds, a JSON API — and a CI check that **fails your build** when a
-> breaking change ships.
+### Slide 4 — Closing (1:22 – 1:30)
 
-*(Advance)*
+> The scraper that fixes itself. Let's go live.
 
-### Slide 4 — Architecture (1:20 – 1:50)
-
-> Here's the whole system. A GitHub Action fires **daily at 9 UTC**, triggers
-> all ten collectors through Bright Data's API, normalizes into SQLite, diffs,
-> and alerts. The green dashed box is the key: everything inside it — proxies,
-> unblocking, retries, browsers — **Bright Data runs it**. We never operate a
-> scraper server. The dashboard reads the same database, and the workflow
-> commits it back daily, so the deployed UI always has fresh data with full
-> history.
->
-> Note the detection signals: errors, zero rows, and **partial breakage** —
-> that one matters on the next slide.
-
-*(Advance)*
-
-### Slide 5 — Bright Data, everywhere (1:50 – 2:25)
-
-> Bright Data isn't bolted on — it's the spine. **Create**: one prompt per
-> vendor, the AI writes the scraper, and we own the code. **Run**: the
-> `c_*` collector ID *is* an API — we POST a trigger, poll the dataset, get
-> clean JSON, straight from GitHub Actions. **Heal**: when a site changes, we
-> POST the heal prompt, poll the progress endpoint to its approval gate, and
-> approve with one call. Same collector ID before and after — **nothing
-> downstream ever changes**.
-
-*(Advance)*
-
-### Slide 6 — Proof (2:25 – 2:45)
-
-> And this isn't a mockup. During a real run, Fireworks' collector came back
-> with 29 rows — but every single `change_type` was null. Classic silent
-> breakage. The pipeline detected it, healed the collector, approved the fix,
-> and re-ran: **29 rows recovered, same `c_*` ID, zero code changes**. Same
-> run: the cooldown skipped vendors that were down instead of burning
-> heal attempts. Full transcript is in the repo.
-
-*(Advance)*
-
-### Slide 7 — Closing (2:45 – 2:50)
-
-> The scraper that fixes itself. Let's watch it live.
-
-*(Quit slideshow. Switch to terminal.)*
+*(Quit slideshow → switch to browser)*
 
 ---
 
-## PART 2 — LIVE DEMO (2:50 – 5:00)
+## PART 2 — LIVE DEMO (1:30 – 5:00)
 
-### Terminal — the pipeline that ran (2:50 – 3:25)
+Everything below is the deployed site: **https://modelpulse-ruby.vercel.app**
 
-Open the terminal with the real scrape output.
+### Overview (1:30 – 2:00)
 
-> This is the actual output from the daily run. Ten collectors, four in
-> parallel. *(scroll slowly)* Here's OpenAI — 154 rows. Mistral — 54. Now
-> watch this: Fireworks returns 29 rows, but the pipeline flags **partial
-> breakage** — 29 of 29 rows missing `change_type`. The page changed under
-> the scraper.
->
-> *(scroll to the heal section)* So it heals: refactor template with a prompt
-> describing what broke… approved — that's a real interaction ID… re-runs the
-> **same collector ID**… and **29 rows recovered**. No human touched it.
-> On-demand, the same flow is one command: `npm run heal -- fireworks
-> "what broke"`.
+*(Tab 1 — `/`)*
 
-### Dashboard — overview (3:25 – 3:45)
+> Here's the live radar — real data, scraped by the daily cron. The ticker streams the latest
+> signals. Every entry carries a type badge and an **impact score** — this DeepSeek deprecation
+> on Fireworks is flagged breaking. Entries edited after publication get the ↻ EDITED badge —
+> that's silent-edit detection, field by field. Search, vendor filters, keyword watches — all live.
 
-Switch to the browser, `http://localhost:3000` (or your deployed URL).
+### HEALTH — the star (2:00 – 2:45)
 
-> Here's the radar. The ticker streams the latest signals. Every entry has a
-> type badge, an **IMPACT score**, and edited entries get the ↻ EDITED flag —
-> that's the silent-edit detection. Filter by vendor, search, or filter to
-> just your keyword watches.
+*(Tab 2 — `/health`)*
 
-### Dashboard — vendor + analytics (3:45 – 4:00)
+> This page tells the self-healing story. One row per `c_*` collector — runs, uptime, heal
+> counts. And the **self-healing log** — every detection with its reason, every heal with its
+> status. *(point)* Here's the Fireworks event — partial breakage detected, healed, APPROVED —
+> real interaction ID, timestamped. And here's Cohere — timed out, healed, approved. The cron
+> wrote these rows. Nobody touched a keyboard.
 
-Click **OpenAI** in the vendor list → then **ANALYTICS**.
+### Terminal — the pipeline (2:45 – 3:20)
 
-> Per-vendor drill-down — every change we've captured. Analytics gives risk
-> by vendor and the week-over-week verdict.
+*(Switch to terminal)*
 
-### Dashboard — HEALTH, the star (4:00 – 4:30)
+> Same story in the logs. Ten collectors, four in parallel. *(scroll)* Detection fires on
+> three signals — errors, zero rows, or partial breakage like this: 29 of 29 rows missing
+> `change_type`. Heal → approve at the gate → re-run the SAME collector → 29 rows recovered.
+> Vendors that are down get skipped by the repair cooldown instead of burning credits. Full
+> transcript is in the repo — real API calls, real IDs.
 
-Click **04 HEALTH**.
+### API + RSS (3:20 – 3:45)
 
-> This is the page that tells the self-healing story. One row per `c_*`
-> collector — runs, uptime, heal counts. And the **self-healing log**: every
-> detection with its reason, every heal with its status. *(point)* There's
-> the Fireworks event — APPROVED, real interaction ID, timestamped. This is
-> the audit trail the cron writes on its own.
+*(Tab 3 — `/api/changes?breaking=true`, then Tab 4 — `/feed/openai`)*
 
-### API + RSS (4:30 – 4:45)
+> Everything the dashboard shows is a public JSON API — filter by vendor, type, breaking.
+> This is what CI consumes: the `check-breaking` script fails your build when a breaking
+> change ships in your window. And every vendor has an RSS feed.
 
-Open `http://localhost:3000/api/changes?breaking=true` in a new tab → then
-`http://localhost:3000/feed/openai`.
+### Close (3:45 – 5:00 buffer)
 
-> Everything the dashboard shows is a public, CORS-enabled JSON API — filter
-> by vendor, type, breaking. And every vendor has an RSS feed. This is what
-> your CI consumes: `check-breaking` fails the build if a breaking change
-> shipped in your window.
+*(Tab 5 — the GitHub repo)*
 
-### Close (4:45 – 5:00)
+> ModelPulse — ten vendors, one schema, self-healing collectors, and a CI gate that catches
+> breaking changes before your users do. The repo has the setup, the tests, the heal
+> transcripts — everything reproducible. Thanks for watching.
 
-> ModelPulse — ten vendors, one schema, self-healing collectors, and a CI
-> gate that catches breaking changes before your users do. The repo, the
-> setup, and the full heal transcript are all public. Thanks for watching.
+*(Buffer absorbs slow page loads; if ahead, scroll the repo README for 10–15 seconds.)*
 
 ---
 
-## Backup plans (if something breaks mid-record)
+## Backup plans
 
-- **A collector shows FAILED on /health** — that's *fine*, even good: point at
-  it and say "that's the repair cooldown doing its job — this vendor's
-  template is regenerating server-side; the system skips it instead of
-  burning heal attempts."
-- **Dashboard empty** — you skipped the DB: run `npm run scrape` once (or
-  `npm run seed` for instant demo data), refresh.
-- **Terminal scroll lost** — the same log lines are in
-  `docs/live-heal-log.md`; open it and scroll there instead.
+- **A collector shows FAILED on /health** — narrate it as a feature: "the cooldown skipped
+  this one — its template is regenerating server-side; the system retries on a schedule
+  instead of burning credits."
+- **A page loads slowly** — cold starts happen; breathe, say "first hit spins up the lambda."
+- **Anything looks off** — the same data is in `docs/live-heal-log.md`; pivot there.
 
 ## After recording
 
-- Upload unlisted first, watch it once end-to-end, then make it public.
-- Put the link in the README's *Live demo* section and in the submission form.
-- Post the video link on LinkedIn tagging **WeMakeDevs** — that's the Daily
-  Bugle track.
+- Upload unlisted → watch once end-to-end → make public.
+- Put the link in the README *Live demo* section + the submission form.
+- Post on LinkedIn tagging **WeMakeDevs** (Daily Bugle track).
