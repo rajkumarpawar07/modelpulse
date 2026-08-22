@@ -16,11 +16,111 @@
  *   POST /dca/collectors/{id}/approve            (approve the healed template)
  */
 import { request } from 'undici';
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import type { TriggerResponse, Dataset, Collector } from './types.js';
 
 const BRIGHTDATA_BASE = 'https://api.brightdata.com';
+
+/* ── Pending-job resume ────────────────────────────────────────────
+ * Bright Data dataset jobs can legitimately outlive our poll window
+ * (first runs of fresh templates, heavy pages like Anthropic/Qwen). When
+ * that happens we record the collection_id and the NEXT run polls it to
+ * completion instead of triggering — the data arrives, zero extra credits.
+ */
+export interface PendingJob {
+  collection_id: string;
+  queued_at: number; // epoch ms
+}
+
+function pendingPath(): string {
+  return process.env.PENDING_JOBS_PATH || './data/pending-jobs.json';
+}
+
+export function loadPendingJobs(): Record<string, PendingJob> {
+  try {
+    return JSON.parse(readFileSync(pendingPath(), 'utf-8')) as Record<string, PendingJob>;
+  } catch {
+    return {};
+  }
+}
+
+export function savePendingJob(vendor: string, collectionId: string): void {
+  const all = loadPendingJobs();
+  all[vendor] = { collection_id: collectionId, queued_at: Date.now() };
+  writePending(all);
+}
+
+export function clearPendingJob(vendor: string): void {
+  const all = loadPendingJobs();
+  if (!(vendor in all)) return;
+  delete all[vendor];
+  writePending(all);
+}
+
+function writePending(all: Record<string, PendingJob>): void {
+  const p = pendingPath();
+  const dir = dirname(p);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(p, JSON.stringify(all, null, 2));
+}
+
+/** Poll a dataset to completion. Throws on timeout. */
+async function pollDataset(
+  vendor: string,
+  collectionId: string,
+  opts: { pollIntervalMs: number; timeoutMs: number; saveRaw: boolean },
+): Promise<Dataset> {
+  const { pollIntervalMs, timeoutMs, saveRaw } = opts;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    await sleep(pollIntervalMs);
+    let datasetRes;
+    try {
+      datasetRes = await request(`${BRIGHTDATA_BASE}/dca/dataset?id=${encodeURIComponent(collectionId)}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${apiKey()}` },
+      });
+    } catch (err) {
+      console.warn(`  ⚠️  Poll error for ${vendor}: ${(err as Error).message}`);
+      continue;
+    }
+
+    if (datasetRes.statusCode === 202) {
+      await datasetRes.body.dump();
+      continue;
+    }
+
+    if ([502, 503, 504].includes(datasetRes.statusCode)) {
+      await datasetRes.body.dump();
+      console.warn(`  ⚠️  ${vendor}: dataset HTTP ${datasetRes.statusCode} (transient), retrying...`);
+      continue;
+    }
+
+    if (datasetRes.statusCode >= 400) {
+      const body = await datasetRes.body.text();
+      throw new Error(`Dataset fetch failed for ${vendor} (HTTP ${datasetRes.statusCode}): ${body}`);
+    }
+
+    const text = await datasetRes.body.text();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      continue;
+    }
+
+    const unwrapped = unwrapDataset(parsed);
+    if (unwrapped !== null) {
+      if (saveRaw) saveRawOutput(vendor, parsed);
+      return unwrapped;
+    }
+    continue;
+  }
+
+  throw new Error(`Timeout after ${timeoutMs}ms waiting for ${vendor} (collection_id=${collectionId})`);
+}
 
 function apiKey(): string {
   const k = process.env.BRIGHT_DATA_API_KEY;
@@ -39,6 +139,26 @@ export async function runCollector(
   opts: { pollIntervalMs?: number; timeoutMs?: number; saveRaw?: boolean } = {},
 ): Promise<Dataset> {
   const { pollIntervalMs = 5000, timeoutMs = 120_000, saveRaw = true } = opts;
+  const MAX_PENDING_HOURS = 24;
+
+  // 0. Resume a pending job from a previous run instead of re-triggering.
+  const pending = loadPendingJobs()[collector.vendor];
+  if (pending) {
+    const ageH = (Date.now() - pending.queued_at) / 3_600_000;
+    if (ageH < MAX_PENDING_HOURS) {
+      console.log(`  ⏳ ${collector.vendor}: resuming pending job ${pending.collection_id} (queued ${Math.round(ageH)}h ago)`);
+      try {
+        const dataset = await pollDataset(collector.vendor, pending.collection_id, { pollIntervalMs, timeoutMs, saveRaw });
+        clearPendingJob(collector.vendor);
+        return dataset;
+      } catch (err) {
+        // Still not ready — keep it pending and fail this run's scrape
+        // without wasting a new trigger.
+        throw err;
+      }
+    }
+    clearPendingJob(collector.vendor); // too old — abandon and re-trigger
+  }
 
   // 1. Trigger
   const triggerBody = [{ url: collector.url }];
@@ -84,74 +204,15 @@ export async function runCollector(
     throw new Error(`No collection_id in trigger response for ${collector.vendor}: ${JSON.stringify(triggerJson)}`);
   }
 
-  // 2. Poll for results
-  const startedAt = Date.now();
-  let lastSeenData: Dataset | null = null;
-
-  while (Date.now() - startedAt < timeoutMs) {
-    await sleep(pollIntervalMs);
-
-    const datasetUrl = `${BRIGHTDATA_BASE}/dca/dataset?id=${encodeURIComponent(collectionId)}`;
-    let datasetRes;
-    try {
-      datasetRes = await request(datasetUrl, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${apiKey()}` },
-      });
-    } catch (err) {
-      console.warn(`  ⚠️  Poll error for ${collector.vendor}: ${(err as Error).message}`);
-      continue;
+  // 2. Poll for results; on timeout keep the job pending for the next run.
+  try {
+    return await pollDataset(collector.vendor, collectionId, { pollIntervalMs, timeoutMs, saveRaw });
+  } catch (err) {
+    if ((err as Error).message.startsWith('Timeout')) {
+      savePendingJob(collector.vendor, collectionId);
     }
-
-    if (datasetRes.statusCode === 202) {
-      // Still processing
-      continue;
-    }
-
-    if ([502, 503, 504].includes(datasetRes.statusCode)) {
-      // Transient gateway error — the job is usually still running.
-      await datasetRes.body.dump();
-      console.warn(`  ⚠️  ${collector.vendor}: dataset HTTP ${datasetRes.statusCode} (transient), retrying...`);
-      continue;
-    }
-
-    if (datasetRes.statusCode >= 400) {
-      const body = await datasetRes.body.text();
-      throw new Error(`Dataset fetch failed for ${collector.vendor} (HTTP ${datasetRes.statusCode}): ${body}`);
-    }
-
-    // Parse. Ready payloads can be a bare array or wrapped ({"entries": [...]}).
-    const text = await datasetRes.body.text();
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // Sometimes it's not JSON during polling; skip.
-      continue;
-    }
-
-    const unwrapped = unwrapDataset(parsed);
-    if (unwrapped !== null) {
-      lastSeenData = unwrapped;
-
-      // Save raw output for debugging
-      if (saveRaw) {
-        saveRawOutput(collector.vendor, parsed);
-      }
-      return unwrapped;
-    }
-
-    // Still processing. Keep polling.
-    continue;
+    throw err;
   }
-
-  if (lastSeenData) {
-    // We got data but timed out before confirming; use it.
-    if (saveRaw) saveRawOutput(collector.vendor, lastSeenData);
-    return lastSeenData;
-  }
-
-  throw new Error(`Timeout after ${timeoutMs}ms waiting for ${collector.vendor} (collection_id=${collectionId})`);
 }
 
 /** Save raw output to ./raw/<vendor>-<timestamp>.json for debugging. */

@@ -82,6 +82,9 @@ jobs:
           git config user.name "modelpulse-bot"
           git config user.email "actions@users.noreply.github.com"
           git add data/modelpulse.db dashboard/data/modelpulse.db dashboard/collectors.json
+          # Pending dataset jobs (timed-out but still running server-side) —
+          # committing the map lets the next run resume them for free.
+          if [ -f data/pending-jobs.json ]; then git add data/pending-jobs.json; fi
           if git diff --cached --quiet; then
             echo "No database changes to commit."
           else

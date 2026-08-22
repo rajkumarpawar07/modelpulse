@@ -5,8 +5,35 @@
  * on collector state. unwrapDataset must accept every "ready" shape and
  * return null (keep polling) for in-flight states.
  */
-import { describe, it, expect } from 'vitest';
-import { unwrapDataset } from '../brightdata.js';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { unwrapDataset, savePendingJob, loadPendingJobs, clearPendingJob } from '../brightdata.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+let tmpDir: string;
+
+beforeAll(() => {
+  tmpDir = mkdtempSync(join(tmpdir(), 'modelpulse-pending-'));
+  process.env.PENDING_JOBS_PATH = join(tmpDir, 'pending.json');
+});
+
+afterAll(() => {
+  delete process.env.PENDING_JOBS_PATH;
+  rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe('pending job map', () => {
+  it('saves, loads, and clears jobs per vendor', () => {
+    expect(loadPendingJobs()).toEqual({});
+    savePendingJob('qwen', 'j_test123');
+    expect(loadPendingJobs().qwen?.collection_id).toBe('j_test123');
+    expect(loadPendingJobs().qwen?.queued_at).toBeGreaterThan(0);
+    clearPendingJob('qwen');
+    expect(loadPendingJobs()).toEqual({});
+    clearPendingJob('never-saved'); // no-op, does not throw
+  });
+});
 
 describe('unwrapDataset', () => {
   it('passes through a bare array', () => {
