@@ -24,12 +24,12 @@ Total: **5:00** — deck ≈ 1:30, live demo ≈ 3:30. The deck is visual; the d
 > Bright Data Scraper Studio. One sentence: **catch breaking changes in AI vendor APIs before
 > your code does.**
 
-### Slide 2 — One radar. Ten vendors. (0:12 – 0:45)
+### Slide 2 — One radar. Fifteen vendors. (0:12 – 0:45)
 
 > The problem is on top: vendors ship breaking changes weekly, they silently edit published
 > entries, and you find out from your error logs.
 >
-> The system is the diagram: ten AI vendors, each watched by a Scraper Studio collector — that's
+> The system is the diagram: fifteen AI vendors, each watched by a Scraper Studio collector — that's
 > the green zone, Bright Data runs all of it. Every change normalizes into one schema with an
 > impact score, lands in SQLite with full history, and comes out where you work: Slack alerts,
 > a CI gate that fails your build, RSS, and a JSON API.
@@ -96,7 +96,7 @@ Everything below is the deployed site: **https://modelpulse-ruby.vercel.app**
 
 *(Tab 5 — the GitHub repo)*
 
-> ModelPulse — ten vendors, one schema, self-healing collectors, and a CI gate that catches
+> ModelPulse — fifteen vendors, one schema, self-healing collectors, and a CI gate that catches
 > breaking changes before your users do. The repo has the setup, the tests, the heal
 > transcripts — everything reproducible. Thanks for watching.
 

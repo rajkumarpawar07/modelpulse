@@ -182,7 +182,7 @@ export function unwrapDataset(parsed: unknown): Dataset | null {
   if (Array.isArray(parsed)) return parsed;
   if (parsed && typeof parsed === 'object') {
     const obj = parsed as Record<string, unknown>;
-    for (const key of ['entries', 'results', 'data', 'items', 'rows']) {
+    for (const key of ['entries', 'results', 'data', 'items', 'rows', 'changelog_entries']) {
       const v = obj[key];
       if (Array.isArray(v)) return v;
     }

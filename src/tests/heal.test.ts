@@ -80,6 +80,17 @@ describe('detectPartialFailure', () => {
     expect(detectPartialFailure(dataset)).toBeNull();
   });
 
+  it('accepts Cohere-style release_date fields', () => {
+    const dataset = Array.from({ length: 5 }, () => ({
+      title: 'New model',
+      release_date: '2026-07-07T00:00:00.000Z',
+      model_name: 'cohere-transcribe-arabic',
+      category: 'added',
+      description: 'x',
+    }));
+    expect(detectPartialFailure(dataset)).toBeNull();
+  });
+
   it('ignores null/empty values, not just absent keys', () => {
     const dataset = Array.from({ length: 5 }, () => ({
       title: 'Entry',

@@ -25,7 +25,7 @@ permissions:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       BRIGHT_DATA_API_KEY: ${{ secrets.BRIGHT_DATA_API_KEY }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -33,6 +33,9 @@ jobs:
       WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
       DATABASE_PATH: ./data/modelpulse.db
       AUTO_HEAL: "true"
+      # Several vendors' dataset jobs legitimately take 5–10 min to finish;
+      # 300s was failing Anthropic/Cohere/Replicate with data waiting.
+      SCRAPE_TIMEOUT_MS: "600000"
     steps:
       - uses: actions/checkout@v4
 

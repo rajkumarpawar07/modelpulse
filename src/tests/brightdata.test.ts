@@ -13,7 +13,7 @@ describe('unwrapDataset', () => {
     expect(unwrapDataset([{ a: 1 }])).toEqual([{ a: 1 }]);
   });
 
-  it.each(['entries', 'results', 'data', 'items', 'rows'])(
+  it.each(['entries', 'results', 'data', 'items', 'rows', 'changelog_entries'])(
     'unwraps { "%s": [...] } payloads',
     key => {
       const rows = [{ a: 1 }, { a: 2 }];

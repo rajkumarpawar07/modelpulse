@@ -2,7 +2,7 @@
 
 > Catch breaking changes in AI vendor APIs before your code does.
 
-ModelPulse watches **10 public AI vendor changelog pages daily**, normalizes them into a single schema, and alerts you on Slack/Discord the moment a breaking change ships. When a vendor redesigns their page, the pipeline **auto-heals itself** — no code change, no redeployment. Built for the [Scrape-Verse Hackathon](https://www.wemakedevs.org/hackathons/scrape-verse) with [Bright Data Scraper Studio](https://brightdata.com).
+ModelPulse watches **15 public AI vendor changelog pages daily**, normalizes them into a single schema, and alerts you on Slack/Discord the moment a breaking change ships. When a vendor redesigns their page, the pipeline **auto-heals itself** — no code change, no redeployment. Built for the [Scrape-Verse Hackathon](https://www.wemakedevs.org/hackathons/scrape-verse) with [Bright Data Scraper Studio](https://brightdata.com).
 
 ![ModelPulse dashboard](./docs/screenshot-dashboard.png)
 
@@ -34,7 +34,7 @@ And when a vendor redesigns their page (which kills every naive scraper *and* ev
 
 A self-healing pipeline of Bright Data collectors that:
 
-1. Scrapes 10 public AI vendor changelog pages daily (+ optional GitHub Releases per vendor)
+1. Scrapes 15 public AI vendor changelog pages daily (+ optional GitHub Releases per vendor)
 2. Normalizes them into one schema (SQLite), scored with a 0–100 **impact rating**
 3. Diffs week-over-week, flags new changes **and detects silent edits** to old ones
 4. Alerts via Slack/Discord/generic **webhooks** — optionally filtered by your **keyword watches**
@@ -55,7 +55,7 @@ A self-healing pipeline of Bright Data collectors that:
 
 ## How Bright Data Scraper Studio is used
 
-ModelPulse is built on **10 independent Scraper Studio collectors**, one per AI vendor. Each was created with a single `bdata scraper create` command:
+ModelPulse is built on **15 independent Scraper Studio collectors**, one per AI vendor. Each was created with a single `bdata scraper create` command:
 
 ```bash
 bdata scraper create https://platform.openai.com/docs/changelog \
@@ -192,7 +192,7 @@ bash scripts/setup.sh
 The setup script will:
 1. Install Node deps
 2. Verify `bdata login`
-3. Create all 10 Scraper Studio collectors (≈15 min)
+3. Create all missing Scraper Studio collectors (≈15 min)
 4. Write `.env` from the template
 5. Run the first scrape so you can see the pipeline working
 

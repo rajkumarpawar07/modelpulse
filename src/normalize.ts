@@ -133,10 +133,10 @@ export function normalizeRow(raw: unknown, collector: Collector): Change | null 
     url = `${collector.url}#e-${stableId(collector.vendor, `${title}|${asString(row.date || '')}`).slice(0, 12)}`;
   }
 
-  const version = asStringOrNull(row.version || row.model || row.model_id || row.release);
+  const version = asStringOrNull(row.version || row.model || row.model_id || row.model_name || row.release);
 
   const changeType = normalizeChangeType(row.change_type || row.type || row.category || row.tag);
-  const date = normalizeDate(row.date || row.published_at || row.created_at || row.timestamp);
+  const date = normalizeDate(row.date || row.published_at || row.release_date || row.created_at || row.timestamp);
 
   const description = stripHtml(rawDescription);
 
@@ -168,7 +168,7 @@ export function normalizeRow(raw: unknown, collector: Collector): Change | null 
 export function detectPartialFailure(dataset: unknown): string | null {
   if (!Array.isArray(dataset) || dataset.length === 0) return null;
 
-  const REQUIRED_DATE_KEYS = ['date', 'published_at', 'created_at', 'timestamp'];
+  const REQUIRED_DATE_KEYS = ['date', 'published_at', 'release_date', 'created_at', 'timestamp'];
   const REQUIRED_TYPE_KEYS = ['change_type', 'type', 'category', 'tag'];
   const REQUIRED_TITLE_KEYS = ['title', 'headline', 'name', 'summary', 'description', 'body', 'details', 'content'];
 

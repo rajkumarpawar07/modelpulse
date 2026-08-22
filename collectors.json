@@ -24,7 +24,7 @@
       "vendor": "google_gemini",
       "vendor_display": "Google Gemini",
       "vendor_homepage": "https://ai.google.dev",
-      "collector_id": "c_mt35zsd71ze3waavgs",
+      "collector_id": "c_mt4b82622gyfsai046",
       "url": "https://ai.google.dev/gemini-api/docs/changelog",
       "tier": 1,
       "enabled": true
@@ -51,7 +51,7 @@
       "vendor": "groq",
       "vendor_display": "Groq",
       "vendor_homepage": "https://groq.com",
-      "collector_id": "c_mt3650mfpr5c1whel",
+      "collector_id": "c_mt4b84pk2287wlln2x",
       "url": "https://console.groq.com/docs/release-notes",
       "tier": 1,
       "enabled": true
@@ -60,7 +60,7 @@
       "vendor": "together",
       "vendor_display": "Together AI",
       "vendor_homepage": "https://together.ai",
-      "collector_id": "c_mt368cf12ipy4obcnm",
+      "collector_id": "c_mt4b86v11x3vr12uwk",
       "url": "https://docs.together.ai/docs/release-notes",
       "tier": 1,
       "enabled": true
@@ -87,9 +87,54 @@
       "vendor": "huggingface",
       "vendor_display": "Hugging Face",
       "vendor_homepage": "https://huggingface.co",
-      "collector_id": "c_mt36dh0eeriviett5",
+      "collector_id": "c_mt4b890219ib842kca",
       "url": "https://huggingface.co/docs/api-inference/en/package_reference/changelog",
       "tier": 1,
+      "enabled": true
+    },
+    {
+      "vendor": "glm",
+      "vendor_display": "Z.ai GLM",
+      "vendor_homepage": "https://z.ai",
+      "url": "https://docs.z.ai/release-notes/new-released",
+      "tier": 1,
+      "collector_id": "c_mt4bd78whbd7waa1i",
+      "enabled": true
+    },
+    {
+      "vendor": "kimi",
+      "vendor_display": "Kimi (Moonshot)",
+      "vendor_homepage": "https://www.moonshot.ai",
+      "url": "https://platform.kimi.ai/blog/posts/changelog",
+      "tier": 1,
+      "collector_id": "c_mt4bi5dd17tngtta1n",
+      "enabled": true
+    },
+    {
+      "vendor": "minimax",
+      "vendor_display": "MiniMax",
+      "vendor_homepage": "https://www.minimax.io",
+      "url": "https://platform.minimax.io/docs/release-notes/models",
+      "tier": 1,
+      "collector_id": "c_mt4bjuen1srxirrag1",
+      "enabled": true
+    },
+    {
+      "vendor": "qwen",
+      "vendor_display": "Qwen (Alibaba)",
+      "vendor_homepage": "https://www.alibabacloud.com",
+      "url": "https://www.alibabacloud.com/help/en/model-studio/model-release-notes",
+      "tier": 1,
+      "collector_id": "c_mt4bjxc61xdbeaifte",
+      "enabled": true
+    },
+    {
+      "vendor": "deepseek",
+      "vendor_display": "DeepSeek",
+      "vendor_homepage": "https://deepseek.com",
+      "url": "https://api-docs.deepseek.com/updates",
+      "tier": 1,
+      "collector_id": "c_mt4blmek11fl1chf7",
       "enabled": true
     }
   ]

@@ -92,7 +92,7 @@ const shadow = () => ({ type: "outer", color: "000000", blur: 8, offset: 3, angl
   /* ── S2 · THE SYSTEM ────────────────────────────────────────── */
   s = p.addSlide();
   base(s);
-  s.addText("One radar. Ten vendors.", { x: 0.55, y: 0.42, w: 8.9, h: 0.6, fontFace: F.sans, fontSize: 30, bold: true, color: C.ink, margin: 0 });
+  s.addText("One radar. Fifteen vendors.", { x: 0.55, y: 0.42, w: 8.9, h: 0.6, fontFace: F.sans, fontSize: 30, bold: true, color: C.ink, margin: 0 });
 
   // Problem chips (top edge, ultra-short)
   const probs = [
@@ -113,14 +113,14 @@ const shadow = () => ({ type: "outer", color: "000000", blur: 8, offset: 3, angl
 
   // vendors node
   card(s, 0.55, 2.5, 1.1, 1.2);
-  s.addText("10", { x: 0.55, y: 2.62, w: 1.1, h: 0.5, fontFace: F.sans, fontSize: 24, bold: true, color: C.ink, align: "center", margin: 0 });
+  s.addText("15", { x: 0.55, y: 2.62, w: 1.1, h: 0.5, fontFace: F.sans, fontSize: 24, bold: true, color: C.ink, align: "center", margin: 0 });
   s.addText("VENDORS", { x: 0.55, y: 3.14, w: 1.1, h: 0.24, fontFace: F.mono, fontSize: 8.5, color: C.dim, align: "center", margin: 0 });
 
   // collectors node (inside Bright Data zone)
   card(s, 2.1, 2.5, 2.25, 1.2, C.panel);
   brackets(s, 2.1, 2.5, 2.25, 1.2, C.signal);
   s.addText("c_*", { x: 2.1, y: 2.6, w: 2.25, h: 0.55, fontFace: F.mono, fontSize: 26, bold: true, color: C.signal, align: "center", margin: 0 });
-  s.addText("10 SELF-HEALING COLLECTORS", { x: 2.1, y: 3.2, w: 2.25, h: 0.24, fontFace: F.mono, fontSize: 8, color: C.dim, align: "center", margin: 0 });
+  s.addText("15 SELF-HEALING COLLECTORS", { x: 2.1, y: 3.2, w: 2.25, h: 0.24, fontFace: F.mono, fontSize: 8, color: C.dim, align: "center", margin: 0 });
 
   // normalize node
   card(s, 4.95, 2.5, 1.7, 1.2);
