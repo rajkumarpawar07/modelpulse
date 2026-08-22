@@ -236,5 +236,17 @@ export function normalizeDataset(dataset: unknown, collector: Collector): Change
     const c = normalizeRow(row, collector);
     if (c) out.push(c);
   }
+  // Some feeds give every entry the same URL (the changelog base page). The
+  // stable id is hash(vendor + url), so without disambiguation dozens of
+  // entries collapse into one row. Keep the first as-is; suffix the rest
+  // with a stable title|date discriminator.
+  const idCounts = new Map<string, number>();
+  for (const c of out) {
+    const n = idCounts.get(c.id) ?? 0;
+    idCounts.set(c.id, n + 1);
+    if (n > 0) {
+      c.id = stableId(collector.vendor, `${c.url}#${n}::${c.title}|${c.date}`);
+    }
+  }
   return out;
 }

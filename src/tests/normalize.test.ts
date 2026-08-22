@@ -195,6 +195,20 @@ describe('normalizeDataset', () => {
     expect(result[1].title).toBe('B');
   });
 
+  it('does not collapse entries that share the same URL (Kimi/Anthropic feeds)', () => {
+    const dataset = [
+      { title: 'K2 Think launch', date: '2025-11-06', url: 'https://x.com/changelog' },
+      { title: 'TPM increase', date: '2025-11-06', url: 'https://x.com/changelog' },
+      { title: 'New context window', date: '2025-10-01', url: 'https://x.com/changelog' },
+    ];
+    const out = normalizeDataset(dataset, MOCK_COLLECTOR);
+    expect(out).toHaveLength(3);
+    expect(new Set(out.map(c => c.id)).size).toBe(3);
+    // Stable across runs: identical input → identical ids
+    expect(normalizeDataset(dataset, MOCK_COLLECTOR).map(c => c.id)).toEqual(out.map(c => c.id));
+  });
+
+
   it('filters out invalid rows', () => {
     const dataset = [
       { title: 'Good', date: '2026-01-01', url: 'https://a.com' },
