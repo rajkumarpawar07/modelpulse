@@ -24,7 +24,7 @@
       "vendor": "google_gemini",
       "vendor_display": "Google Gemini",
       "vendor_homepage": "https://ai.google.dev",
-      "collector_id": "c_mt4b82622gyfsai046",
+      "collector_id": "c_mt4fyf3v68hq6xq9g",
       "url": "https://ai.google.dev/gemini-api/docs/changelog",
       "tier": 1,
       "enabled": true
@@ -51,7 +51,7 @@
       "vendor": "groq",
       "vendor_display": "Groq",
       "vendor_homepage": "https://groq.com",
-      "collector_id": "c_mt4b84pk2287wlln2x",
+      "collector_id": "c_mt4fyhpak03cuyip4",
       "url": "https://console.groq.com/docs/release-notes",
       "tier": 1,
       "enabled": true
@@ -60,7 +60,7 @@
       "vendor": "together",
       "vendor_display": "Together AI",
       "vendor_homepage": "https://together.ai",
-      "collector_id": "c_mt4b86v11x3vr12uwk",
+      "collector_id": "c_mt4fyjwq1ftrx85cab",
       "url": "https://docs.together.ai/docs/release-notes",
       "tier": 1,
       "enabled": true
@@ -87,7 +87,7 @@
       "vendor": "huggingface",
       "vendor_display": "Hugging Face",
       "vendor_homepage": "https://huggingface.co",
-      "collector_id": "c_mt4b890219ib842kca",
+      "collector_id": "c_mt4fym281r9e9ta1ux",
       "url": "https://huggingface.co/docs/api-inference/en/package_reference/changelog",
       "tier": 1,
       "enabled": true

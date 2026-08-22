@@ -42,6 +42,14 @@ const PROMPTS: Record<string, string> = {
     'Extract every changelog entry. For each entry: title, version, date (YYYY-MM-DD), change_type (one of: added, changed, deprecated, removed, fixed), description, url. Skip navigation, footer, hero sections, and any non-changelog content.',
   anthropic:
     'Extract every release-notes entry. For each entry: title, date (YYYY-MM-DD), version_or_model (e.g. claude-3-5-sonnet), change_type (added, changed, deprecated, removed, fixed), description, url. Skip nav, footer, and unrelated docs.',
+  google_gemini:
+    'This is a JavaScript-rendered Google DevSite page — the changelog content is rendered client-side, so wait for full hydration before extracting. Extract every dated entry on the Gemini API changelog. For each entry return exactly: date (YYYY-MM-DD), title (derive from the first sentence if there is no heading), change_type (one of: added, changed, deprecated, removed, fixed), description, url. Entries are grouped under date headings. Skip navigation, sidebars, footers, and non-changelog content.',
+  groq:
+    'This is a JavaScript-rendered docs page on a console subdomain (public — no login needed; wait for full hydration). Extract every release-notes entry. For each entry return exactly: title, date (YYYY-MM-DD), change_type (one of: added, changed, deprecated, removed, fixed), version if present, description, url. Skip navigation, login prompts, sidebars, and non-release-note content.',
+  together:
+    'This is a JavaScript-rendered docs site — wait for full hydration, then extract every release-notes entry. For each entry return exactly: title, date (YYYY-MM-DD), change_type (one of: added, changed, deprecated, removed, fixed), version if present, description, url. Skip navigation and unrelated docs sections.',
+  huggingface:
+    'This is a Hugo-generated documentation changelog. Extract every changelog entry in the list. For each entry return exactly: title (the change summary), date (YYYY-MM-DD), change_type (one of: added, changed, deprecated, removed, fixed), description, url. Skip the docs sidebar, navigation, and unrelated package-reference sections.',
 };
 
 function promptFor(entry: CollectorEntry): string {
