@@ -138,4 +138,35 @@ describe('buildAlert', () => {
     expect(alert.is_breaking).toBe(false);
     expect(alert.changes).toHaveLength(0);
   });
+
+  it('shows only the top 5 changes by priority — breaking first, then impact', () => {
+    const mk = (id: string, impact: number, breaking = false) =>
+      makeChange({ id, title: `Change ${id}`, impact, is_breaking: breaking });
+    const diff: DiffResult[] = [
+      {
+        vendor: 'openai',
+        vendor_display: 'OpenAI',
+        new_changes: [
+          mk('low1', 10), mk('b1', 40, true), mk('high1', 80), mk('mid1', 50),
+          mk('high2', 75), mk('b2', 20, true), mk('low2', 5), mk('mid2', 55),
+        ],
+        window_start: '2026-08-08',
+        window_end: '2026-08-15',
+      },
+    ];
+    const alert = buildAlert(diff);
+    // Full list preserved for the JSON webhook payload…
+    expect(alert.changes).toHaveLength(8);
+    // …but the message shows only the 5 highest-priority entries:
+    // both breaking changes plus impact 80, 75, 55.
+    expect(alert.text).toContain('Change b1');
+    expect(alert.text).toContain('Change b2');
+    expect(alert.text).toContain('Change high1');
+    expect(alert.text).toContain('Change high2');
+    expect(alert.text).toContain('Change mid2');
+    expect(alert.text).not.toContain('Change low1');
+    expect(alert.text).not.toContain('Change low2');
+    expect(alert.text).not.toContain('Change mid1');
+    expect(alert.text).toContain('…and 3 more');
+  });
 });

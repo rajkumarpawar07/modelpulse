@@ -15,12 +15,14 @@ import type { Change } from "./types";
  *  1. DATABASE_PATH env (explicit override)
  *  2. ../data/modelpulse.db — local dev from dashboard/ (the live DB the scraper writes)
  *  3. ./data/modelpulse.db  — Vercel deploys (DB committed inside dashboard/)
+ *  4. $LAMBDA_TASK_ROOT/data/modelpulse.db — AWS-style serverless layouts
  */
 function resolveDbPath(): string {
   const candidates = [
     process.env.DATABASE_PATH,
     join(process.cwd(), "..", "data", "modelpulse.db"),
     join(process.cwd(), "data", "modelpulse.db"),
+    process.env.LAMBDA_TASK_ROOT ? join(process.env.LAMBDA_TASK_ROOT, "data", "modelpulse.db") : null,
   ].filter((p): p is string => Boolean(p));
   for (const p of candidates) {
     if (existsSync(p)) return p;

@@ -7,7 +7,7 @@ import { LiveDot } from "../components/ui";
 import { readLatestChanges } from "../lib/read";
 
 export const metadata: Metadata = {
-  title: "ModelPulse — AI API Change Intelligence",
+  title: "ModelPulse",
   description: "Catch breaking changes in AI vendor APIs before your code does.",
 };
 

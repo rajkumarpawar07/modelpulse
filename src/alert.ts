@@ -20,10 +20,15 @@ function renderChange(c: Change): string {
   const emoji = SLACK_EMOJI[c.change_type];
   const breaking = c.is_breaking ? ' *(BREAKING)*' : '';
   const ver = c.version ? ` — \`${c.version}\`` : '';
-  return `${emoji} [${c.date}] *${c.change_type}*${breaking}: ${c.title}${ver}\n   ${c.url}`;
+  const impact = c.impact != null ? ` \`(IMPACT ${c.impact})\`` : '';
+  return `${emoji} *${c.vendor_display}* [${c.date}] *${c.change_type}*${breaking}${impact}: ${c.title}${ver}\n   ${c.url}`;
 }
 
-/** Build the alert payload. */
+/**
+ * Build the alert payload. The chat message shows only the top N changes by
+ * priority — breaking first, then by impact score (ALERT_MAX_CHANGES,
+ * default 5). The full list stays in `changes` for the JSON webhook payload.
+ */
 export function buildAlert(diff: DiffResult[]): {
   text: string;
   is_breaking: boolean;
@@ -34,23 +39,25 @@ export function buildAlert(diff: DiffResult[]): {
   const breaking = allChanges.filter(c => c.is_breaking);
   const isBreaking = breaking.length > 0;
 
+  const maxShown = Math.max(1, parseInt(process.env.ALERT_MAX_CHANGES || '5', 10));
+  const ranked = [...allChanges].sort((a, b) => {
+    if (a.is_breaking !== b.is_breaking) return a.is_breaking ? -1 : 1;
+    return (b.impact ?? 0) - (a.impact ?? 0);
+  });
+  const top = ranked.slice(0, maxShown);
+
   const header = isBreaking
-    ? `🚨 *ModelPulse — ${breaking.length} breaking change(s) this week*`
-    : `📡 *ModelPulse — ${allChanges.length} new change(s) this week*`;
+    ? `🚨 *ModelPulse — ${allChanges.length} new change(s), ${breaking.length} breaking — top ${top.length} by impact*`
+    : `📡 *ModelPulse — ${allChanges.length} new change(s) — top ${top.length} by impact*`;
 
   const lines: string[] = [header, ''];
-
-  for (const d of diff) {
-    const dBreaking = d.new_changes.filter(c => c.is_breaking).length;
-    const flag = dBreaking > 0 ? ` (${dBreaking} breaking)` : '';
-    lines.push(`*${d.vendor_display}*${flag}:`);
-    for (const c of d.new_changes.slice(0, 10)) {
-      lines.push(renderChange(c));
-    }
-    if (d.new_changes.length > 10) {
-      lines.push(`_…and ${d.new_changes.length - 10} more_`);
-    }
+  for (const c of top) {
+    lines.push(renderChange(c));
+  }
+  const omitted = allChanges.length - top.length;
+  if (omitted > 0) {
     lines.push('');
+    lines.push(`_…and ${omitted} more — see the dashboard or \`/api/changes\`._`);
   }
 
   return {
