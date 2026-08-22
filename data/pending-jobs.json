@@ -1,18 +1,14 @@
 {
-  "cohere": {
-    "collection_id": "j_mt4e61tkatogb5901",
-    "queued_at": 1787404260351
+  "groq": {
+    "collection_id": "j_mt4ksdz41zv6mi7bf1",
+    "queued_at": 1787415096962
   },
-  "anthropic": {
-    "collection_id": "j_mt4e61qs2pm1s8zxet",
-    "queued_at": 1787404260501
+  "together": {
+    "collection_id": "j_mt4kseoysgq85af0v",
+    "queued_at": 1787415096962
   },
-  "glm": {
-    "collection_id": "j_mt4e6pq41kfnwqryai",
-    "queued_at": 1787404290891
-  },
-  "kimi": {
-    "collection_id": "j_mt4e6tk61hkginnxxj",
-    "queued_at": 1787404295920
+  "huggingface": {
+    "collection_id": "j_mt4ksf0l1aozfkdc79",
+    "queued_at": 1787415096962
   }
 }

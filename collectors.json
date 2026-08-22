@@ -51,8 +51,8 @@
       "vendor": "groq",
       "vendor_display": "Groq",
       "vendor_homepage": "https://groq.com",
-      "collector_id": "c_mt4fyhpak03cuyip4",
-      "url": "https://console.groq.com/docs/release-notes",
+      "collector_id": "c_mt4k7ibd13opxf2209",
+      "url": "https://console.groq.com/docs/changelog",
       "tier": 1,
       "enabled": true
     },
@@ -60,8 +60,8 @@
       "vendor": "together",
       "vendor_display": "Together AI",
       "vendor_homepage": "https://together.ai",
-      "collector_id": "c_mt4fyjwq1ftrx85cab",
-      "url": "https://docs.together.ai/docs/release-notes",
+      "collector_id": "c_mt4k7kur2jrdrs24qi",
+      "url": "https://docs.together.ai/docs/changelog",
       "tier": 1,
       "enabled": true
     },
@@ -87,8 +87,8 @@
       "vendor": "huggingface",
       "vendor_display": "Hugging Face",
       "vendor_homepage": "https://huggingface.co",
-      "collector_id": "c_mt4fym281r9e9ta1ux",
-      "url": "https://huggingface.co/docs/api-inference/en/package_reference/changelog",
+      "collector_id": "c_mt4k7os14n15xq29k",
+      "url": "https://huggingface.co/changelog",
       "tier": 1,
       "enabled": true
     },

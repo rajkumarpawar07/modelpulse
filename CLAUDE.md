@@ -21,11 +21,11 @@ If a target site changes layout, HEAL them instead:
 | google_gemini | c_mt4fyf3v68hq6xq9g | https://ai.google.dev/gemini-api/docs/changelog |
 | mistral | c_mt3638oncytrsltmo | https://docs.mistral.ai/getting-started/changelog/ |
 | cohere | c_mt363bal1b9dhuyepi | https://docs.cohere.com/changelog |
-| groq | c_mt4fyhpak03cuyip4 | https://console.groq.com/docs/release-notes |
-| together | c_mt4fyjwq1ftrx85cab | https://docs.together.ai/docs/release-notes |
+| groq | c_mt4k7ibd13opxf2209 | https://console.groq.com/docs/changelog |
+| together | c_mt4k7kur2jrdrs24qi | https://docs.together.ai/docs/changelog |
 | replicate | c_mt36a1uldo8r1e2zo | https://replicate.com/changelog |
 | fireworks | c_mt36bqzoxmjmuuk6y | https://docs.fireworks.ai/changelog |
-| huggingface | c_mt4fym281r9e9ta1ux | https://huggingface.co/docs/api-inference/en/package_reference/changelog |
+| huggingface | c_mt4k7os14n15xq29k | https://huggingface.co/changelog |
 | glm | c_mt4bd78whbd7waa1i | https://docs.z.ai/release-notes/new-released |
 | kimi | c_mt4bi5dd17tngtta1n | https://platform.kimi.ai/blog/posts/changelog |
 | minimax | c_mt4bjuen1srxirrag1 | https://platform.minimax.io/docs/release-notes/models |
