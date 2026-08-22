@@ -29,10 +29,11 @@ Total: **5:00** — deck ≈ 1:30, live demo ≈ 3:30. The deck is visual; the d
 > The problem is on top: vendors ship breaking changes weekly, they silently edit published
 > entries, and you find out from your error logs.
 >
-> The system is the diagram: fifteen AI vendors, each watched by a Scraper Studio collector — that's
-> the green zone, Bright Data runs all of it. Every change normalizes into one schema with an
-> impact score, lands in SQLite with full history, and comes out where you work: Slack alerts,
-> a CI gate that fails your build, RSS, and a JSON API.
+> The system is the diagram: fifteen AI vendors — from OpenAI and Anthropic to the new frontier
+> labs, GLM, Kimi, Qwen, MiniMax, and DeepSeek — each watched by a Scraper Studio collector.
+> That's the green zone, Bright Data runs all of it. Every change normalizes into one schema
+> with an impact score, lands in SQLite with full history, and comes out where you work:
+> Slack alerts, a CI gate that fails your build, RSS, and a JSON API.
 
 ### Slide 3 — Detect. Heal. Recover. (0:45 – 1:22)
 
@@ -78,7 +79,7 @@ Everything below is the deployed site: **https://modelpulse-ruby.vercel.app**
 
 *(Switch to terminal)*
 
-> Same story in the logs. Ten collectors, four in parallel. *(scroll)* Detection fires on
+> Same story in the logs. Fifteen collectors, four in parallel. *(scroll)* Detection fires on
 > three signals — errors, zero rows, or partial breakage like this: 29 of 29 rows missing
 > `change_type`. Heal → approve at the gate → re-run the SAME collector → 29 rows recovered.
 > Vendors that are down get skipped by the repair cooldown instead of burning credits. Full
