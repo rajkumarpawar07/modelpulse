@@ -84,9 +84,10 @@ function stableId(vendor: string, key: string): string {
   return createHash('sha256').update(`${vendor}::${key}`).digest('hex').slice(0, 32);
 }
 
-/** Strip HTML tags and collapse whitespace. */
+/** Strip HTML tags and markdown bold, collapse whitespace. */
 function stripHtml(s: string): string {
   return s
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -103,6 +104,10 @@ function stripHtml(s: string): string {
  * description, trimmed to a readable length.
  */
 function deriveTitle(descriptionHtml: string, fallback: string): string {
+  if (!descriptionHtml.trim()) return fallback;
+  // Gemini-style entries embed the heading as the first **bold** segment.
+  const bold = descriptionHtml.match(/\*\*([^*]+)\*\*/);
+  if (bold && bold[1].trim()) return bold[1].trim().slice(0, 110);
   const text = stripHtml(descriptionHtml);
   if (!text) return fallback;
   const sentence = text.split(/(?<=[.!?])\s/)[0] || text;
@@ -119,7 +124,11 @@ export function normalizeRow(raw: unknown, collector: Collector): Change | null 
   if (raw == null || typeof raw !== 'object') return null;
   const row = raw as Record<string, unknown>;
 
-  const rawDescription = asString(row.description || row.body || row.details || row.content);
+  let rawDescription = asString(row.description || row.body || row.details || row.content);
+  if (!rawDescription.trim() && Array.isArray(row.updates)) {
+    // Gemini-style entries: {date, updates: ["**Heading**: body…", …]}
+    rawDescription = row.updates.filter(x => typeof x === 'string').join('\n\n');
+  }
 
   // Required: title (derived from the description when the source has none)
   let title = asString(row.title || row.headline || row.name || row.summary || row.announcement_title);
@@ -188,7 +197,7 @@ export function detectPartialFailure(dataset: unknown): string | null {
 
   const REQUIRED_DATE_KEYS = ['date', 'published_at', 'release_date', 'created_at', 'timestamp', 'year'];
   const REQUIRED_TYPE_KEYS = ['change_type', 'type', 'category', 'tag'];
-  const REQUIRED_TITLE_KEYS = ['title', 'headline', 'name', 'summary', 'announcement_title', 'description', 'body', 'details', 'content'];
+  const REQUIRED_TITLE_KEYS = ['title', 'headline', 'name', 'summary', 'announcement_title', 'description', 'body', 'details', 'content', 'updates'];
 
   let missingDate = 0;
   let nullType = 0;

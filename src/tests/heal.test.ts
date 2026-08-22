@@ -34,6 +34,14 @@ describe('detectPartialFailure', () => {
     expect(reason).toMatch(/null change_type/);
   });
 
+  it('does not flag Gemini-style {date, updates[]} entries as missing titles', () => {
+    const dataset = Array.from({ length: 5 }, () => ({
+      date: 'August 13, 2026',
+      updates: ['**Gemini 3.7 Flash generally available**: Released today.'],
+    }));
+    expect(detectPartialFailure(dataset)).toBeNull();
+  });
+
   it('does not flag announcement feeds that legitimately have no type labels', () => {
     // Qwen/MiniMax/DeepSeek payloads: rich rows, no type key at all
     const dataset = Array.from({ length: 6 }, () => ({
