@@ -14,21 +14,5 @@
   "kimi": {
     "collection_id": "j_mt4e6tk61hkginnxxj",
     "queued_at": 1787404295920
-  },
-  "minimax": {
-    "collection_id": "j_mt4eci092g8uovtig3",
-    "queued_at": 1787404560769
-  },
-  "qwen": {
-    "collection_id": "j_mt4eci5b28o7zvt1nb",
-    "queued_at": 1787404560905
-  },
-  "deepseek": {
-    "collection_id": "j_mt4ed5kh1u4xqdweu0",
-    "queued_at": 1787404591556
-  },
-  "google_gemini": {
-    "collection_id": "j_mt4ghvy42dm7gupi3p",
-    "queued_at": 1787408341340
   }
 }
