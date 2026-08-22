@@ -23,15 +23,27 @@ describe('detectPartialFailure', () => {
     expect(detectPartialFailure({ entries: [] })).toBeNull();
   });
 
-  it('flags a majority of rows missing change_type', () => {
+  it('flags a majority of rows with an explicitly null change_type (the Fireworks scenario)', () => {
     const dataset = Array.from({ length: 10 }, (_, i) => ({
       title: `Entry ${i}`,
       date: '2026-08-15',
       description: 'text',
-      // change_type missing everywhere — the exact demo-heal scenario
+      change_type: null, // key present but null — real post-redesign degradation
     }));
     const reason = detectPartialFailure(dataset);
-    expect(reason).toMatch(/missing change_type/);
+    expect(reason).toMatch(/null change_type/);
+  });
+
+  it('does not flag announcement feeds that legitimately have no type labels', () => {
+    // Qwen/MiniMax/DeepSeek payloads: rich rows, no type key at all
+    const dataset = Array.from({ length: 6 }, () => ({
+      announcement_title: 'Model upgrade notice',
+      announcement_url: 'https://example.com/n/1',
+      year: '2026',
+      month: 'August',
+      description: 'Details of the upgrade',
+    }));
+    expect(detectPartialFailure(dataset)).toBeNull();
   });
 
   it('flags a majority of rows missing dates', () => {

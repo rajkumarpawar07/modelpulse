@@ -243,9 +243,17 @@ export function unwrapDataset(parsed: unknown): Dataset | null {
   if (Array.isArray(parsed)) return parsed;
   if (parsed && typeof parsed === 'object') {
     const obj = parsed as Record<string, unknown>;
-    for (const key of ['entries', 'results', 'data', 'items', 'rows', 'changelog_entries']) {
+    for (const key of ['entries', 'results', 'data', 'items', 'rows', 'changelog_entries', 'release_notes', 'model_releases', 'updates']) {
       const v = obj[key];
       if (Array.isArray(v)) return v;
+    }
+    // Generators name the array per vendor. Accept any own property that is
+    // a non-empty array of objects — ready data, whatever it's called.
+    // (Pending/building payloads only carry strings/numbers, never object arrays.)
+    for (const v of Object.values(obj)) {
+      if (Array.isArray(v) && v.length > 0 && v.every(x => x != null && typeof x === 'object')) {
+        return v as Dataset;
+      }
     }
   }
   return null;

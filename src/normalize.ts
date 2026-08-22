@@ -122,21 +122,39 @@ export function normalizeRow(raw: unknown, collector: Collector): Change | null 
   const rawDescription = asString(row.description || row.body || row.details || row.content);
 
   // Required: title (derived from the description when the source has none)
-  let title = asString(row.title || row.headline || row.name || row.summary);
+  let title = asString(row.title || row.headline || row.name || row.summary || row.announcement_title);
   if (!title.trim()) title = deriveTitle(rawDescription, `${collector.vendor_display} update`);
   if (!title.trim()) return null;
 
   // URL is the dedup key (combined with vendor). Some sources omit it —
   // synthesize a stable one from the entry content so ids stay stable.
-  let url = asString(row.url || row.link || row.href || '');
+  let url = asString(row.url || row.link || row.href || row.announcement_url || '');
   if (!url.trim()) {
     url = `${collector.url}#e-${stableId(collector.vendor, `${title}|${asString(row.date || '')}`).slice(0, 12)}`;
   }
 
   const version = asStringOrNull(row.version || row.model || row.model_id || row.model_name || row.release);
 
-  const changeType = normalizeChangeType(row.change_type || row.type || row.category || row.tag);
-  const date = normalizeDate(row.date || row.published_at || row.release_date || row.created_at || row.timestamp);
+  // Pages without type labels (Qwen/MiniMax announcement feeds): infer
+  // breaking-relevant types from the text so deprecations still alert.
+  let rawType: unknown = row.change_type ?? row.type ?? row.category ?? row.tag;
+  if (rawType == null || String(rawType).trim() === '') {
+    const hay = `${title} ${rawDescription}`.toLowerCase();
+    if (/deprecat|sunset|end-of-life|\beol\b/.test(hay)) rawType = 'deprecated';
+    else if (/removed|discontinued|shut(ting)? down|turned off/.test(hay)) rawType = 'removed';
+  }
+  const changeType = normalizeChangeType(rawType);
+
+  // Some feeds (Qwen) give only {year, month} — build a full date.
+  let rawDate: unknown =
+    row.date || row.published_at || row.release_date || row.created_at || row.timestamp;
+  if (rawDate == null || String(rawDate).trim() === '') {
+    if (row.year != null && row.month != null) {
+      const ms = Date.parse(`${row.month} 1, ${row.year}`);
+      if (!isNaN(ms)) rawDate = new Date(ms).toISOString().slice(0, 10);
+    }
+  }
+  const date = normalizeDate(rawDate);
 
   const description = stripHtml(rawDescription);
 
@@ -168,12 +186,12 @@ export function normalizeRow(raw: unknown, collector: Collector): Change | null 
 export function detectPartialFailure(dataset: unknown): string | null {
   if (!Array.isArray(dataset) || dataset.length === 0) return null;
 
-  const REQUIRED_DATE_KEYS = ['date', 'published_at', 'release_date', 'created_at', 'timestamp'];
+  const REQUIRED_DATE_KEYS = ['date', 'published_at', 'release_date', 'created_at', 'timestamp', 'year'];
   const REQUIRED_TYPE_KEYS = ['change_type', 'type', 'category', 'tag'];
-  const REQUIRED_TITLE_KEYS = ['title', 'headline', 'name', 'summary', 'description', 'body', 'details', 'content'];
+  const REQUIRED_TITLE_KEYS = ['title', 'headline', 'name', 'summary', 'announcement_title', 'description', 'body', 'details', 'content'];
 
   let missingDate = 0;
-  let missingType = 0;
+  let nullType = 0;
   let missingTitle = 0;
 
   for (const row of dataset) {
@@ -181,8 +199,12 @@ export function detectPartialFailure(dataset: unknown): string | null {
     const obj = row as Record<string, unknown>;
     const has = (keys: string[]) => keys.some(k => obj[k] != null && String(obj[k]).trim() !== '');
     if (!has(REQUIRED_DATE_KEYS)) missingDate += 1;
-    if (!has(REQUIRED_TYPE_KEYS)) missingType += 1;
     if (!has(REQUIRED_TITLE_KEYS)) missingTitle += 1;
+    // A type key that EXISTS but is null/empty is real degradation (the
+    // Fireworks case). Type keys that are simply absent are normal for
+    // announcement feeds (Qwen/MiniMax/DeepSeek) — not a breakage.
+    const typeKeyPresent = REQUIRED_TYPE_KEYS.some(k => k in obj);
+    if (typeKeyPresent && !has(REQUIRED_TYPE_KEYS)) nullType += 1;
   }
 
   const n = dataset.length;
@@ -190,7 +212,7 @@ export function detectPartialFailure(dataset: unknown): string | null {
   // Any required field missing from a majority of rows means the page moved.
   if (ratio(missingTitle) > 0.5) return `${missingTitle}/${n} rows are missing titles`;
   if (ratio(missingDate) > 0.5) return `${missingDate}/${n} rows are missing dates`;
-  if (ratio(missingType) > 0.5) return `${missingType}/${n} rows are missing change_type`;
+  if (ratio(nullType) > 0.5) return `${nullType}/${n} rows have null change_type`;
   return null;
 }
 
