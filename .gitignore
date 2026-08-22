@@ -59,3 +59,4 @@ coverage/
 .cache/
 .parcel-cache/
 .turbo/
+.zcode/
