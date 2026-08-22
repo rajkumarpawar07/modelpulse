@@ -43,7 +43,7 @@ A self-healing pipeline of Bright Data collectors that:
 
 ## Live demo
 
-- **Dashboard:** [modelpulse.vercel.app](https://modelpulse.vercel.app) — the daily workflow commits the
+- **Dashboard:** [modelpulse-ruby.vercel.app](https://modelpulse-ruby.vercel.app) — the daily workflow commits the
   updated SQLite database back to this repo, so a deployed dashboard always reads fresh data with full
   history. Deploy your own with `cd dashboard && npx vercel`.
 - **Demo video:** [Watch on YouTube](https://youtube.com) _(link updated at submission)_
