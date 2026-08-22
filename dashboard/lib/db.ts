@@ -28,27 +28,47 @@ function dbCandidates(): string[] {
 }
 
 /**
- * Open the first candidate that actually works. Existing is not enough:
- * on Vercel's read-only filesystem a WAL-mode database cannot be opened
- * even readonly (SQLite must create -shm/-wal sidecars). When a readonly
- * open fails, copy the bytes to /tmp — the one writable location in a
- * lambda — and open the copy read-write there. That path works for any
- * journal mode and any source-file permission quirk.
+ * Open a database and PROVE it works by running a real query. Opening a
+ * WAL-mode database readonly on a read-only filesystem succeeds — the
+ * failure only surfaces on the first query, when SQLite cannot initialize
+ * the WAL shared-memory. Without this validation the broken handle wins
+ * and every read silently returns empty.
+ */
+function tryOpen(path: string, readonly: boolean): Database.Database | null {
+  let db: Database.Database | null = null;
+  try {
+    db = new Database(path, readonly ? { readonly: true } : undefined);
+    db.prepare("SELECT count(*) FROM sqlite_schema").get();
+    return db;
+  } catch {
+    try {
+      db?.close();
+    } catch {
+      /* handle already released */
+    }
+    return null;
+  }
+}
+
+/**
+ * Open the first candidate that actually works — validated by a query:
+ *  1. readonly open (works for rollback-journal files anywhere)
+ *  2. copy the bytes to /tmp (the writable location in a lambda) and open
+ *     the copy read-write — works for WAL files and permission quirks
  */
 function openDb(): Database.Database {
   for (const p of dbCandidates()) {
     if (!existsSync(p)) continue;
+    const ro = tryOpen(p, true);
+    if (ro) return ro;
     try {
-      return new Database(p, { readonly: true });
+      const st = statSync(p);
+      const tmp = join(tmpdir(), `modelpulse-${st.size}-${Math.round(st.mtimeMs)}.db`);
+      copyFileSync(p, tmp);
+      const rw = tryOpen(tmp, false);
+      if (rw) return rw;
     } catch {
-      try {
-        const st = statSync(p);
-        const tmp = join(tmpdir(), `modelpulse-${st.size}-${Math.round(st.mtimeMs)}.db`);
-        copyFileSync(p, tmp);
-        return new Database(tmp);
-      } catch {
-        // this candidate is unusable — try the next one
-      }
+      // this candidate is unusable — try the next one
     }
   }
   // Nothing opened; return a handle to the preferred path so callers'

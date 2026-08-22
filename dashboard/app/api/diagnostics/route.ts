@@ -50,18 +50,27 @@ export async function GET() {
     return { path: p, exists: true, journal, mode, size };
   };
 
-  // Try each candidate the same way lib/db.ts does: readonly open, then a
-  // /tmp copy. Report which strategy worked and the row counts.
+  // Try each candidate the way lib/db.ts does: readonly open validated by a
+  // real query (a WAL file on a read-only fs opens fine but fails on first
+  // query), then a /tmp copy opened read-write. Report what actually worked.
   const attempts: Array<Record<string, unknown>> = [];
   let opened: Record<string, unknown> | null = null;
   const Database = (await import("better-sqlite3")).default;
+  const countRows = (db: InstanceType<typeof Database>) => ({
+    changes: (db.prepare("SELECT COUNT(*) AS c FROM changes").get() as { c: number }).c,
+    runs: (db.prepare("SELECT COUNT(*) AS c FROM runs").get() as { c: number }).c,
+    heals: (db.prepare("SELECT COUNT(*) AS c FROM heals").get() as { c: number }).c,
+  });
   for (const p of candidates) {
     if (!existsSync(p)) continue;
     const attempt: Record<string, unknown> = { path: p };
+    let db: InstanceType<typeof Database> | null = null;
     try {
-      const db = new Database(p, { readonly: true });
+      db = new Database(p, { readonly: true });
       attempt.readonlyOpen = true;
+      attempt.rows = countRows(db);
       db.close();
+      db = null;
     } catch (err) {
       attempt.readonlyOpen = false;
       attempt.readonlyError = (err as Error).message;
@@ -69,23 +78,26 @@ export async function GET() {
         const st = statSync(p);
         const tmp = join(tmpdir(), `diag-${st.size}-${Math.round(st.mtimeMs)}.db`);
         copyFileSync(p, tmp);
-        const db = new Database(tmp);
+        const tdb = new Database(tmp);
         attempt.tmpCopyOpen = true;
-        attempt.changes = (db.prepare("SELECT COUNT(*) AS c FROM changes").get() as { c: number }).c;
-        attempt.runs = (db.prepare("SELECT COUNT(*) AS c FROM runs").get() as { c: number }).c;
-        attempt.heals = (db.prepare("SELECT COUNT(*) AS c FROM heals").get() as { c: number }).c;
-        db.close();
-        if (!opened) {
-          opened = { ...attempt, openedVia: "tmpCopy", resolvedPath: p };
-        }
+        attempt.rows = countRows(tdb);
+        tdb.close();
+        if (!opened) opened = { ...attempt, openedVia: "tmpCopy", resolvedPath: p };
       } catch (err2) {
         attempt.tmpCopyOpen = false;
         attempt.tmpCopyError = (err2 as Error).message;
       }
     }
     attempts.push(attempt);
-    if (attempt.readonlyOpen && !opened) {
+    if (attempt.readonlyOpen && (attempt.rows as unknown) && !opened) {
       opened = { ...attempt, openedVia: "readonly", resolvedPath: p };
+    }
+    if (db) {
+      try {
+        db.close();
+      } catch {
+        /* released */
+      }
     }
   }
 
