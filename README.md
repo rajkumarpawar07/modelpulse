@@ -46,8 +46,9 @@ A self-healing pipeline of Bright Data collectors that:
 - **Dashboard:** [modelpulse-ruby.vercel.app](https://modelpulse-ruby.vercel.app) — the daily workflow commits the
   updated SQLite database back to this repo, so a deployed dashboard always reads fresh data with full
   history. Deploy your own with `cd dashboard && npx vercel`.
-- **Demo video:** [Watch on YouTube](https://youtube.com) _(link updated at submission)_
-- **Slack alert sample:** [`examples/slack-alert-sample.json`](./examples/slack-alert-sample.json)
+- **Demo video:** [Watch on YouTube](https://youtu.be/ugt2p7Ka4NA) _(link updated at submission)_
+- **Slack alert sample:** 
+<img width="2084" height="1274" alt="image" src="https://github.com/user-attachments/assets/c0f7a712-1dca-4a71-8e04-6a3c2b9ff03d" />
 - **Real self-healing transcript:** [`docs/live-heal-log.md`](./docs/live-heal-log.md) — actual API calls, actual collector ID, actual fix
 - **Self-healing at a glance:** the dashboard's `/health` page shows collector uptime and the full auto-heal history
 
